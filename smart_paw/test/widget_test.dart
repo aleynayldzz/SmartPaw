@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 
 import 'package:smart_paw/main.dart';
 
@@ -30,7 +31,7 @@ void main() {
     expect(find.text('Şifremi unuttum?'), findsOneWidget);
     expect(find.text('Giriş Yap'), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Hesap Oluştur'));
