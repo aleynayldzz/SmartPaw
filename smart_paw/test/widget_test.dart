@@ -35,6 +35,6 @@ void main() {
 
     await tester.tap(find.text('Hesap Oluştur'));
     await tester.pumpAndSettle();
-    expect(find.text('Signup Screen'), findsOneWidget);
+    expect(find.text('Kayıt Ol'), findsOneWidget);
   });
 }
