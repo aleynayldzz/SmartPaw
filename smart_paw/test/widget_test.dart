@@ -25,7 +25,10 @@ void main() {
 
     await tester.tap(find.text('Giriş Yap'));
     await tester.pumpAndSettle();
-    expect(find.text('Login Screen'), findsOneWidget);
+    expect(find.text('E-posta'), findsOneWidget);
+    expect(find.text('Şifre'), findsOneWidget);
+    expect(find.text('Şifremi unuttum?'), findsOneWidget);
+    expect(find.text('Giriş Yap'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
