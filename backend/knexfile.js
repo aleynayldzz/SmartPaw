@@ -1,20 +1,24 @@
 // Update with your config settings.
+const path = require("node:path");
+
+// Ensure env vars are available when running knex CLI (migrations only)
+require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
 
 /**
  * @type { Object.<string, import("knex").Knex.Config> }
  */
 module.exports = {
   development: {
-    client: 'pg',
+    client: "pg",
     connection: {
-      host: '127.0.0.1',
-      port: 5432,
-      user: 'postgres',
-      password: '310802', // pgAdmin'e girerken kullandığın şifre
-      database: 'SmartPaw' // Ekran görüntüsündeki isimle birebir aynı olmalı
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT),
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_DATABASE
     },
     migrations: {
-      directory: './src/database/migrations'
+      directory: "./src/database/migrations"
     }
   }
 };
