@@ -5,6 +5,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
@@ -287,6 +288,282 @@ app.post("/api/auth/verify-email", async (req, res) => {
       ok: true,
       message: "Email verified successfully.",
       data: { is_verified: true }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, message: "Internal server error." });
+  }
+});
+
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (isNonEmptyString(secret)) return String(secret).trim();
+  if (process.env.NODE_ENV === "production") {
+    console.error("JWT_SECRET is required in production.");
+  }
+  return "smartpaw-dev-jwt-secret-change-me";
+}
+
+function signAuthToken(user) {
+  return jwt.sign(
+    {
+      sub: user.user_id,
+      email: user.email
+    },
+    getJwtSecret(),
+    { expiresIn: "7d" }
+  );
+}
+
+// Login (email + password → JWT)
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({
+        ok: false,
+        message:
+          "Database is not configured. Please create backend/.env and set DB_* variables."
+      });
+    }
+
+    const { email, password } = req.body ?? {};
+    const errors = {};
+
+    if (!isNonEmptyString(email) || !isValidEmail(email)) {
+      errors.email = "Please enter a valid email address";
+    }
+
+    if (!isNonEmptyString(password)) {
+      errors.password = "Password cannot be empty";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Validation failed.",
+        errors
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const userRes = await pool.query(
+      `
+      SELECT user_id, email, password_hash, is_verified, name, surname
+      FROM users
+      WHERE lower(email) = $1
+      LIMIT 1
+      `,
+      [normalizedEmail]
+    );
+    const user = userRes.rows[0];
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        message: "Account not found"
+      });
+    }
+
+    if (!user.is_verified) {
+      return res.status(403).json({
+        ok: false,
+        message: "Please verify your email address"
+      });
+    }
+
+    const passwordOk = await bcrypt.compare(password, user.password_hash);
+    if (!passwordOk) {
+      return res.status(401).json({
+        ok: false,
+        message: "Email or password is incorrect."
+      });
+    }
+
+    const token = signAuthToken(user);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Login successful",
+      data: {
+        token,
+        user: {
+          user_id: user.user_id,
+          email: user.email,
+          name: user.name,
+          surname: user.surname,
+          is_verified: user.is_verified
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, message: "Internal server error." });
+  }
+});
+
+// Forgot password — creates a reset code (send by email in production)
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({
+        ok: false,
+        message:
+          "Database is not configured. Please create backend/.env and set DB_* variables."
+      });
+    }
+
+    const { email } = req.body ?? {};
+    const errors = {};
+
+    if (!isNonEmptyString(email) || !isValidEmail(email)) {
+      errors.email = "Please enter a valid email address";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Validation failed.",
+        errors
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const userRes = await pool.query(
+      `SELECT user_id FROM users WHERE lower(email) = $1 LIMIT 1`,
+      [normalizedEmail]
+    );
+    const user = userRes.rows[0];
+
+    if (!user) {
+      return res.status(404).json({
+        ok: false,
+        message: "Account not found"
+      });
+    }
+
+    const code = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      `
+      INSERT INTO verification_codes (user_id, code, purpose, expires_at, is_used)
+      VALUES ($1, $2, 'password_reset', $3, false)
+      `,
+      [user.user_id, code, expiresAt]
+    );
+
+    const payload = {
+      ok: true,
+      message: "Password reset code sent. Check your email.",
+      data: { next: "reset_password" }
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      payload.data.dev_reset_code = code;
+    }
+
+    return res.status(200).json(payload);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, message: "Internal server error." });
+  }
+});
+
+// Reset password using code from forgot-password
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({
+        ok: false,
+        message:
+          "Database is not configured. Please create backend/.env and set DB_* variables."
+      });
+    }
+
+    const { email, code, password, confirmPassword } = req.body ?? {};
+    const errors = {};
+
+    if (!isNonEmptyString(email) || !isValidEmail(email)) {
+      errors.email = "Please enter a valid email address";
+    }
+    if (!isNonEmptyString(code)) errors.code = "Reset code is required.";
+    if (!isNonEmptyString(password)) {
+      errors.password = "Password is required.";
+    } else if (!isValidPassword(password)) {
+      errors.password =
+        "Password must be at least 8 characters long and include uppercase, lowercase, and a special character.";
+    }
+    if (!isNonEmptyString(confirmPassword)) {
+      errors.confirmPassword = "Confirm Password is required.";
+    } else if (password !== confirmPassword) {
+      errors.confirmPassword = "Confirm Password must match Password.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ ok: false, message: "Validation failed.", errors });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const userRes = await pool.query(
+      `SELECT user_id FROM users WHERE lower(email) = $1 LIMIT 1`,
+      [normalizedEmail]
+    );
+    const user = userRes.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ ok: false, message: "Account not found" });
+    }
+
+    const now = new Date();
+    const verificationRes = await pool.query(
+      `
+      SELECT code_id, code, expires_at, is_used
+      FROM verification_codes
+      WHERE user_id = $1
+        AND purpose = 'password_reset'
+        AND is_used = false
+        AND expires_at > $2
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [user.user_id, now]
+    );
+    const verificationRow = verificationRes.rows[0];
+
+    if (!verificationRow || String(verificationRow.code) !== String(code).trim()) {
+      return res.status(400).json({
+        ok: false,
+        message: "Invalid or expired reset code.",
+        errors: { code: "Invalid or expired reset code." }
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`UPDATE verification_codes SET is_used = true WHERE code_id = $1`, [
+        verificationRow.code_id
+      ]);
+      await client.query(`UPDATE users SET password_hash = $1 WHERE user_id = $2`, [
+        passwordHash,
+        user.user_id
+      ]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Password updated successfully."
     });
   } catch (err) {
     console.error(err);
