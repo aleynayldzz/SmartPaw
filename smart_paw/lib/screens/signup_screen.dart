@@ -401,21 +401,6 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                         ),
-                        if (!_isFormValid && !_isSubmitting)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 10),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Tüm alanlar geçerli olduğunda Hesap Oluştur düğmesi etkinleştirilecektir.',
-                                style: TextStyle(
-                                  color: Color(0xFF6B6B6B),
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 6),
                       ],
                     ),
                   ),

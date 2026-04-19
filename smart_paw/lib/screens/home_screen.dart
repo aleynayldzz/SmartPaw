@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_session.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.showLoginSuccess = false});
@@ -12,17 +13,38 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Future<void> _logout() async {
+    await AuthSession.clear();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.showLoginSuccess) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      if (widget.showLoginSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Login successful')),
         );
-      });
-    }
+      }
+
+      final isVerified = AuthSession.user?['is_verified'];
+      if (isVerified == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Hesabınız doğrulanmadı. Yine de giriş yaptınız; lütfen e-postanızı doğrulayın.',
+            ),
+          ),
+        );
+      }
+    });
   }
 
   @override
@@ -32,9 +54,34 @@ class _HomeScreenState extends State<HomeScreen> {
     const titleColor = Color(0xFF3E3E3E);
 
     final name = AuthSession.user?['name']?.toString();
-    final greeting = (name != null && name.isNotEmpty) ? 'Merhaba, $name' : 'Ana Sayfa';
+    final greeting =
+        (name != null && name.isNotEmpty) ? 'Merhaba, $name' : 'Ana Sayfa';
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'SmartPaw',
+          style: TextStyle(
+            color: titleColor,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _logout,
+            child: const Text(
+              'Çıkış Yap',
+              style: TextStyle(
+                color: titleColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: Container(
         width: double.infinity,
         height: double.infinity,

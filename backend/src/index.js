@@ -27,12 +27,12 @@ const hasDbConfig =
 
 const pool = hasDbConfig
   ? new Pool({
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
-      user: process.env.DB_USER,
-      password: String(process.env.DB_PASSWORD),
-      database: process.env.DB_DATABASE
-    })
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: String(process.env.DB_PASSWORD),
+    database: process.env.DB_DATABASE
+  })
   : null;
 
 if (!pool) {
@@ -377,13 +377,6 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    if (!user.is_verified) {
-      return res.status(403).json({
-        ok: false,
-        message: "Please verify your email address"
-      });
-    }
-
     const passwordOk = await bcrypt.compare(password, user.password_hash);
     if (!passwordOk) {
       return res.status(401).json({
@@ -397,7 +390,9 @@ app.post("/api/auth/login", async (req, res) => {
 
     return res.status(200).json({
       ok: true,
-      message: "Login successful",
+      message: user.is_verified
+        ? "Login successful"
+        : "Login successful. Please verify your email address.",
       data: {
         accessToken,
         refreshToken,
