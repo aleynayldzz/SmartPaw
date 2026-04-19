@@ -15,6 +15,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.2.8",
+    "nodemailer": "^6.9.16",
     "pg": "^8.20.0"
   },
   "devDependencies": {

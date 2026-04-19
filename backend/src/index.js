@@ -6,6 +6,7 @@ const dotenv = require("dotenv");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
@@ -60,6 +61,77 @@ function isValidPassword(password) {
 function generateVerificationCode() {
   // 6-digit numeric string
   return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function hasSmtpConfig() {
+  return (
+    isNonEmptyString(process.env.SMTP_HOST) &&
+    isNonEmptyString(process.env.SMTP_PORT) &&
+    isNonEmptyString(process.env.SMTP_USER) &&
+    isNonEmptyString(process.env.SMTP_PASS) &&
+    isNonEmptyString(process.env.SMTP_FROM)
+  );
+}
+
+function createMailTransport() {
+  if (!hasSmtpConfig()) {
+    return null;
+  }
+
+  const port = Number(process.env.SMTP_PORT);
+  const secure =
+    String(process.env.SMTP_SECURE || "").trim() === "1" ||
+    String(process.env.SMTP_SECURE || "").trim().toLowerCase() === "true" ||
+    port === 465;
+
+  return nodemailer.createTransport({
+    host: String(process.env.SMTP_HOST).trim(),
+    port,
+    secure,
+    auth: {
+      user: String(process.env.SMTP_USER).trim(),
+      pass: String(process.env.SMTP_PASS)
+    }
+  });
+}
+
+async function sendVerificationEmail({ toEmail, code, expiresAt }) {
+  const transport = createMailTransport();
+  if (!transport) {
+    const err = new Error("SMTP is not configured");
+    err.code = "SMTP_NOT_CONFIGURED";
+    throw err;
+  }
+
+  const from = String(process.env.SMTP_FROM).trim();
+  const subject = "SmartPaw email verification code";
+
+  const text = [
+    "Your SmartPaw verification code is:",
+    "",
+    code,
+    "",
+    `This code expires at: ${expiresAt.toISOString()}`,
+    "",
+    "If you did not create an account, you can ignore this email."
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;color:#111">
+      <p>Your SmartPaw verification code is:</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
+      <p style="color:#444">This code expires at: <strong>${expiresAt.toISOString()}</strong></p>
+      <p style="color:#444">If you did not create an account, you can ignore this email.</p>
+    </div>
+  `;
+
+  await transport.sendMail({
+    from,
+    to: toEmail,
+    subject,
+    text,
+    html
+  });
 }
 
 app.get("/health", (_req, res) => {
@@ -165,18 +237,51 @@ app.post("/api/auth/signup", async (req, res) => {
 
       await client.query("COMMIT");
 
-      // NOTE: Sending the code back is useful for development. In production, send via email/SMS instead.
-      return res.status(201).json({
+      try {
+        await sendVerificationEmail({
+          toEmail: createdUser.email,
+          code,
+          expiresAt
+        });
+      } catch (mailErr) {
+        console.error(mailErr);
+        try {
+          await pool.query(`DELETE FROM users WHERE user_id = $1`, [createdUser.user_id]);
+        } catch (cleanupErr) {
+          console.error(cleanupErr);
+        }
+
+        if (mailErr && mailErr.code === "SMTP_NOT_CONFIGURED") {
+          return res.status(500).json({
+            ok: false,
+            message:
+              "Email delivery is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend/.env."
+          });
+        }
+
+        return res.status(500).json({
+          ok: false,
+          message:
+            "We could not send the verification email. Please check SMTP settings and try again."
+        });
+      }
+
+      const payload = {
         ok: true,
         message: "Registration successful. Please verify your email.",
         data: {
           user_id: createdUser.user_id,
           email: createdUser.email,
           is_verified: createdUser.is_verified,
-          next: "verification_code",
-          dev_verification_code: code
+          next: "verification_code"
         }
-      });
+      };
+
+      if (process.env.NODE_ENV !== "production") {
+        payload.data.dev_verification_code = code;
+      }
+
+      return res.status(201).json(payload);
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;
@@ -217,7 +322,9 @@ app.post("/api/auth/verify-email", async (req, res) => {
       errors.email = "Email format is invalid.";
     }
 
-    if (!isNonEmptyString(code)) errors.code = "Verification code is required.";
+    if (!isNonEmptyString(code)) {
+      errors.code = "Verification code is required.";
+    }
 
     if (Object.keys(errors).length > 0) {
       return res.status(400).json({ ok: false, message: "Validation failed.", errors });

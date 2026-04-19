@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+import '../config/api_config.dart';
+import 'login_screen.dart';
+import 'welcome_screen.dart';
 
 class VerificationScreen extends StatefulWidget {
   const VerificationScreen({super.key, required this.email});
@@ -22,6 +28,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
   late final List<TextEditingController> _controllers;
   late final List<FocusNode> _focusNodes;
   bool _syncingControllers = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -45,6 +52,67 @@ class _VerificationScreenState extends State<VerificationScreen> {
       _controllers.map((c) => c.text).join().replaceAll(RegExp(r'\D'), '');
 
   bool get _codeComplete => _code.length == _digitCount;
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _verifyCode() async {
+    FocusScope.of(context).unfocus();
+    if (!_codeComplete || _isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final response = await http.post(
+        ApiConfig.verifyEmailUri(),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': widget.email.trim(), 'code': _code}),
+      );
+
+      if (!mounted) return;
+
+      Map<String, dynamic> body = {};
+      if (response.body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic>) {
+            body = decoded;
+          }
+        } on FormatException {
+          _showSnack('Something went wrong. Please try again.');
+          return;
+        }
+      }
+
+      if (response.statusCode == 200 && body['ok'] == true) {
+        _showSnack('Successful verification.');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+        return;
+      }
+
+      _showSnack(body['message']?.toString() ?? 'Verification failed.');
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack(
+        'Could not connect to the server. Check that the backend is running.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
 
   void _onDigitChanged(int index, String raw) {
     if (_syncingControllers) return;
@@ -110,6 +178,24 @@ class _VerificationScreenState extends State<VerificationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 8, top: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  tooltip: 'Back',
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const WelcomeScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  icon: const Icon(Icons.arrow_back, color: _titleColor),
+                ),
+              ),
+            ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -203,10 +289,8 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _codeComplete
-                                ? () {
-                                    FocusScope.of(context).unfocus();
-                                  }
+                            onPressed: (_codeComplete && !_isSubmitting)
+                                ? _verifyCode
                                 : null,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _buttonRose,
@@ -225,7 +309,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                                 letterSpacing: 0.3,
                               ),
                             ),
-                            child: const Text('Verify'),
+                            child: Text(_isSubmitting ? 'Verifying...' : 'Verify'),
                           ),
                         ),
                       ],
