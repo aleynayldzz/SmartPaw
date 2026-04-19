@@ -12,4 +12,6 @@ class ApiConfig {
   }
 
   static Uri signupUri() => Uri.parse('$baseUrl/api/auth/signup');
+
+  static Uri loginUri() => Uri.parse('$baseUrl/api/auth/login');
 }

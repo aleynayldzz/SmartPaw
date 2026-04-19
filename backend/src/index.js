@@ -304,14 +304,26 @@ function getJwtSecret() {
   return "smartpaw-dev-jwt-secret-change-me";
 }
 
-function signAuthToken(user) {
+function signAccessToken(user) {
   return jwt.sign(
     {
       sub: user.user_id,
-      email: user.email
+      email: user.email,
+      typ: "access"
     },
     getJwtSecret(),
     { expiresIn: "7d" }
+  );
+}
+
+function signRefreshToken(user) {
+  return jwt.sign(
+    {
+      sub: user.user_id,
+      typ: "refresh"
+    },
+    getJwtSecret(),
+    { expiresIn: "30d" }
   );
 }
 
@@ -380,13 +392,16 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    const token = signAuthToken(user);
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
 
     return res.status(200).json({
       ok: true,
       message: "Login successful",
       data: {
-        token,
+        accessToken,
+        refreshToken,
+        token: accessToken,
         user: {
           user_id: user.user_id,
           email: user.email,
