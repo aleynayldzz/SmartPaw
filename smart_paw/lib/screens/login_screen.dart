@@ -7,6 +7,7 @@ import '../config/api_config.dart';
 import '../services/auth_session.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
+import 'welcome_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -184,104 +185,132 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/images/patilogo.png',
-                      height: 92,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(height: 34),
-                    _SoftTextField(
-                      controller: _emailController,
-                      hintText: 'E-posta',
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      borderColor: borderPink,
-                      errorText: _emailError,
-                    ),
-                    const SizedBox(height: 14),
-                    _SoftTextField(
-                      controller: _passwordController,
-                      hintText: 'Şifre',
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) {
-                        if (_fieldsFilled && !_isSubmitting) {
-                          _submit();
-                        }
-                      },
-                      borderColor: borderPink,
-                      errorText: _passwordError,
-                      suffix: IconButton(
-                        onPressed: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
-                        },
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: const Color(0xFF9D8C8D),
+          child: Stack(
+            children: [
+              Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 18,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/patilogo.png',
+                          height: 92,
+                          fit: BoxFit.contain,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const ForgotPasswordScreen(),
+                        const SizedBox(height: 34),
+                        _SoftTextField(
+                          controller: _emailController,
+                          hintText: 'E-posta',
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          borderColor: borderPink,
+                          errorText: _emailError,
+                        ),
+                        const SizedBox(height: 14),
+                        _SoftTextField(
+                          controller: _passwordController,
+                          hintText: 'Şifre',
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) {
+                            if (_fieldsFilled && !_isSubmitting) {
+                              _submit();
+                            }
+                          },
+                          borderColor: borderPink,
+                          errorText: _passwordError,
+                          suffix: IconButton(
+                            onPressed: () {
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
+                            },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: const Color(0xFF9D8C8D),
                             ),
-                          );
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF3E3E3E),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 6,
-                          ),
-                          textStyle: const TextStyle(
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        child: const Text('Şifremi unuttum?'),
-                      ),
-                    ),
-                    if (_generalError != null) ...[
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          _generalError!,
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.w600,
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              );
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF3E3E3E),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 6,
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            child: const Text('Şifremi unuttum?'),
                           ),
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    _GradientButton(
-                      text: 'Giriş Yap',
-                      start: buttonStart,
-                      end: buttonEnd,
-                      isLoading: _isSubmitting,
-                      onPressed: _fieldsFilled && !_isSubmitting
-                          ? _submit
-                          : null,
+                        if (_generalError != null) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _generalError!,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        _GradientButton(
+                          text: 'Giriş Yap',
+                          start: buttonStart,
+                          end: buttonEnd,
+                          isLoading: _isSubmitting,
+                          onPressed: _fieldsFilled && !_isSubmitting
+                              ? _submit
+                              : null,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                top: 4,
+                left: 4,
+                child: IconButton(
+                  tooltip: 'Geri',
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const WelcomeScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Color(0xFF1F1F1F),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

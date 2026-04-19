@@ -5,7 +5,6 @@ import 'dart:convert';
 
 import '../config/api_config.dart';
 import 'login_screen.dart';
-import 'welcome_screen.dart';
 
 class VerificationScreen extends StatefulWidget {
   const VerificationScreen({super.key, required this.email});
@@ -187,7 +186,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   onPressed: () {
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute<void>(
-                        builder: (_) => const WelcomeScreen(),
+                        builder: (_) => const LoginScreen(),
                       ),
                       (route) => false,
                     );

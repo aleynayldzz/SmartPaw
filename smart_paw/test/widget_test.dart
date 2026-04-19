@@ -35,6 +35,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
     await tester.pumpAndSettle();
+    expect(find.text("SmartPaw'a\nHoş Geldiniz!"), findsOneWidget);
 
     await tester.tap(find.text('Giriş Yap'));
     await tester.pumpAndSettle();
@@ -42,7 +43,11 @@ void main() {
     expect(find.text('Şifre'), findsOneWidget);
     expect(find.text('Şifremi unuttum?'), findsOneWidget);
     expect(find.text('Giriş Yap'), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_back_ios_new_rounded), findsNothing);
+    expect(find.byIcon(Icons.arrow_back_ios_new_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text("SmartPaw'a\nHoş Geldiniz!"), findsOneWidget);
   });
 
   testWidgets('Verification screen opens from navigator', (
@@ -79,5 +84,14 @@ void main() {
     expect(find.text('Verification Code'), findsOneWidget);
     expect(find.text('Verify'), findsOneWidget);
     expect(find.text('Geri Gel'), findsNothing);
+
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(find.text('E-posta'), findsOneWidget);
+    expect(find.text('Şifre'), findsOneWidget);
+    expect(find.text('Şifremi unuttum?'), findsOneWidget);
+    expect(find.text('open_verification'), findsNothing);
   });
 }

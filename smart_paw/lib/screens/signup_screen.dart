@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import 'verification_screen.dart';
+import 'welcome_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -412,7 +413,14 @@ class _SignupScreenState extends State<SignupScreen> {
               left: 4,
               child: IconButton(
                 tooltip: 'Geri',
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const WelcomeScreen(),
+                    ),
+                    (route) => false,
+                  );
+                },
                 icon: const Icon(
                   Icons.arrow_back_ios_new_rounded,
                   color: titleColor,
