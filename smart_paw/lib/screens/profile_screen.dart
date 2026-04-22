@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_session.dart';
+import 'login_screen.dart';
 
 /// Profil görünümü. [useFemaleAvatar] `true` ise `kızavatar.png`, aksi halde `erkekavatar.png` kullanılır.
 class ProfileScreen extends StatelessWidget {
@@ -26,6 +27,15 @@ class ProfileScreen extends StatelessWidget {
     final n = AuthSession.user?['name']?.toString().trim();
     if (n != null && n.isNotEmpty) return n;
     return 'Aleyna Yıldız';
+  }
+
+  Future<void> _performLogout(BuildContext context) async {
+    await AuthSession.clear();
+    if (!context.mounted) return;
+    await Navigator.of(context).pushAndRemoveUntil<void>(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -104,7 +114,7 @@ class ProfileScreen extends StatelessWidget {
                             _ProfileTile(
                               icon: Icons.logout_rounded,
                               label: 'Çıkış Yap',
-                              onTap: () {},
+                              onTap: () => _performLogout(context),
                             ),
                           ],
                         ),
