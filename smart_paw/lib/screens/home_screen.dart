@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_session.dart';
+import '../widgets/main_bottom_nav.dart';
 import 'login_screen.dart';
-import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.showLoginSuccess = false});
@@ -14,6 +14,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _navIndex = 0;
+
   Future<void> _logout() async {
     await AuthSession.clear();
     if (!mounted) return;
@@ -30,9 +32,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       if (widget.showLoginSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Login successful')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Login successful')));
       }
 
       final isVerified = AuthSession.user?['is_verified'];
@@ -55,8 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
     const titleColor = Color(0xFF3E3E3E);
 
     final name = AuthSession.user?['name']?.toString();
-    final greeting =
-        (name != null && name.isNotEmpty) ? 'Merhaba, $name' : 'Ana Sayfa';
+    final greeting = (name != null && name.isNotEmpty)
+        ? 'Merhaba, $name'
+        : 'Ana Sayfa';
 
     return Scaffold(
       appBar: AppBar(
@@ -64,24 +67,22 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         title: const Text(
           'SmartPaw',
-          style: TextStyle(
-            color: titleColor,
-            fontWeight: FontWeight.w800,
-          ),
+          style: TextStyle(color: titleColor, fontWeight: FontWeight.w800),
         ),
         actions: [
           TextButton(
             onPressed: _logout,
             child: const Text(
               'Çıkış Yap',
-              style: TextStyle(
-                color: titleColor,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: titleColor, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 8),
         ],
+      ),
+      bottomNavigationBar: MainBottomNav(
+        currentIndex: _navIndex,
+        onSelect: (i) => setState(() => _navIndex = i),
       ),
       body: Container(
         width: double.infinity,
@@ -126,34 +127,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Color(0xFF6B6B6B),
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const ProfileScreen(),
-                          ),
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFFF5C7C1),
-                        foregroundColor: titleColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text(
-                        'Profil',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -163,4 +136,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
