@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_session.dart';
+import 'add_cat_screen.dart';
 import 'login_screen.dart';
 
 /// Profil görünümü. [useFemaleAvatar] `true` ise `kızavatar.png`, aksi halde `erkekavatar.png` kullanılır.
@@ -99,7 +100,35 @@ class ProfileScreen extends StatelessWidget {
                             _ProfileTile(
                               icon: Icons.pets_outlined,
                               label: 'Kedilerim',
-                              onTap: () {},
+                              onTap: () async {
+                                final nav = Navigator.of(context);
+                                final result = await nav.push<AddCatNavResult?>(
+                                  MaterialPageRoute(
+                                    fullscreenDialog: false,
+                                    builder: (_) => const AddCatScreen(),
+                                  ),
+                                );
+                                if (!context.mounted) return;
+                                if (result == null) return;
+                                if (result.draft != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Profil kaydedildi: ${result.draft!.name}',
+                                      ),
+                                    ),
+                                  );
+                                }
+                                if (result.deletedCatId != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Kedi silindi (id ${result.deletedCatId}).',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
                             ),
                             _ProfileTile(
                               icon: Icons.notifications_outlined,

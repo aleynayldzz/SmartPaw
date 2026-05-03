@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -26,6 +27,13 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'SmartPaw',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('tr'),
+      supportedLocales: const [Locale('tr')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE9A5A1)),
         useMaterial3: true,
