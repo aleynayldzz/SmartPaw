@@ -1,10 +1,14 @@
-/// Sabit kedi ırkı listesi; görseller [assetPath] üzerinden yüklenir (ileride DB ile eşlenebilir).
+/// Kedi ırkı; [breedId] sunucudan gelir (null ise yalnızca yerel yedek liste).
 class CatBreedOption {
   const CatBreedOption({
     required this.slug,
     required this.labelTr,
     required this.assetPath,
+    this.breedId,
   });
+
+  /// API `breed_id`; kayıtta zorunlu.
+  final int? breedId;
 
   /// Dosya tabanlı kimlik (`ankara`, `british_shorthair`).
   final String slug;

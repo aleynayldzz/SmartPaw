@@ -4,65 +4,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../data/cat_breeds.dart';
+import '../models/cat_profile.dart';
+import '../services/cat_api_service.dart';
 
 const _kCreamBg = Color(0xFFF9F6F0);
 const _kTitleColor = Color(0xFF3E3E3E);
 const _kAccentPink = Color(0xFFD88A92);
 const _kFieldBorder = Color(0xFF5C5C5C);
-
-/// Yeni oluşturma veya güncelleme sonrası dönen form verisi.
-class CatDraft {
-  const CatDraft({
-    required this.name,
-    required this.breed,
-    required this.birthDate,
-    required this.isFemale,
-    required this.isNeutered,
-    required this.weightKg,
-    this.catId,
-  });
-
-  final String name;
-  final CatBreedOption breed;
-  final DateTime birthDate;
-  final bool isFemale;
-  final bool isNeutered;
-  final double weightKg;
-
-  /// Düzenleme modunda dolu gelir (silme/gelecek API için tutuluyor).
-  final int? catId;
-}
-
-/// Düzenleme ekranına geçilirken kullanılacak başlangıç verisi.
-class CatFormInitial {
-  const CatFormInitial({
-    required this.catId,
-    required this.name,
-    required this.breedSlug,
-    required this.birthDate,
-    required this.isFemale,
-    required this.isNeutered,
-    required this.weightKg,
-  });
-
-  final int catId;
-  final String name;
-  final String breedSlug;
-  final DateTime birthDate;
-  final bool isFemale;
-  final bool isNeutered;
-  final double weightKg;
-}
-
-/// `Navigator.push` ile bu ekrandan dönünce taşınan sonuç (kayıt veya silme).
-class AddCatNavResult {
-  AddCatNavResult.saved(this.draft) : deletedCatId = null;
-
-  AddCatNavResult.deleted(this.deletedCatId) : draft = null;
-
-  final CatDraft? draft;
-  final int? deletedCatId;
-}
 
 class AddCatScreen extends StatefulWidget {
   const AddCatScreen({super.key, this.initial});
@@ -81,6 +29,11 @@ class _AddCatScreenState extends State<AddCatScreen> {
   bool? _isFemale;
   bool? _isNeutered;
   double _weightKg = 4.0;
+
+  List<CatBreedOption> _breedOptions = [];
+  bool _breedsLoading = true;
+  String? _breedsLoadError;
+  bool _saving = false;
 
   bool get _isEditing => widget.initial != null;
 
@@ -106,13 +59,55 @@ class _AddCatScreenState extends State<AddCatScreen> {
     final ini = widget.initial;
     if (ini != null) {
       _nameCtrl.text = ini.name;
-      _breed = breedBySlug(ini.breedSlug);
+      _breed = CatBreedOption(
+        breedId: ini.breedId,
+        slug: ini.breedSlug,
+        labelTr: ini.breedLabel,
+        assetPath: CatApiService.assetPathForServer(ini.avatarUrl, ini.breedSlug),
+      );
       _birth = ini.birthDate;
       _isFemale = ini.isFemale;
       _isNeutered = ini.isNeutered;
       _weightKg = ini.weightKg;
+      _breedsLoading = false;
+    }
+    _loadBreeds();
+  }
+
+  Future<void> _loadBreeds() async {
+    if (widget.initial == null && mounted) {
+      setState(() {
+        _breedsLoading = true;
+        _breedsLoadError = null;
+      });
+    }
+    try {
+      final list = await CatApiService.fetchBreeds();
+      if (!mounted) return;
+      setState(() {
+        _breedOptions = list;
+        _breedsLoadError = null;
+        _breedsLoading = false;
+      });
+    } on CatApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _breedOptions = [];
+        _breedsLoadError = e.message;
+        _breedsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _breedOptions = [];
+        _breedsLoadError = 'Irklar yüklenemedi.';
+        _breedsLoading = false;
+      });
     }
   }
+
+  String _birthIso(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   void dispose() {
@@ -148,10 +143,25 @@ class _AddCatScreenState extends State<AddCatScreen> {
       ),
     );
     if (yes != true || !context.mounted) return;
-    Navigator.pop(context, AddCatNavResult.deleted(id));
+    try {
+      await CatApiService.deleteCat(id);
+      if (!context.mounted) return;
+      Navigator.pop(context, AddCatNavResult.deleted(id));
+    } on CatApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   void _pickBreed(BuildContext context) {
+    if (_breedOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_breedsLoadError ?? 'Irk listesi boş.'),
+        ),
+      );
+      return;
+    }
     final searchCtrl = TextEditingController();
     showModalBottomSheet<void>(
       context: context,
@@ -161,9 +171,10 @@ class _AddCatScreenState extends State<AddCatScreen> {
         return StatefulBuilder(
           builder: (context, setModal) {
             final q = searchCtrl.text.trim().toLowerCase();
+            final source = _breedOptions;
             final filtered = q.isEmpty
-                ? kCatBreeds.toList(growable: false)
-                : kCatBreeds
+                ? source.toList(growable: false)
+                : source
                     .where((b) => b.labelTr.toLowerCase().contains(q))
                     .toList(growable: false);
             final height = MediaQuery.sizeOf(context).height * 0.72;
@@ -529,6 +540,17 @@ class _AddCatScreenState extends State<AddCatScreen> {
   }
 
   bool _validate() {
+    if (!_isEditing && _breed?.breedId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_breedsLoadError ?? 'Irk seçmek için ırkların yüklenmesi gerekir.'),
+        ),
+      );
+      return false;
+    }
+    if (_isEditing) {
+      return true;
+    }
     final ne = _nameError(_nameCtrl.text);
     if (ne != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ne)));
@@ -563,22 +585,35 @@ class _AddCatScreenState extends State<AddCatScreen> {
     return true;
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_validate()) return;
-    Navigator.pop(
-      context,
-      AddCatNavResult.saved(
-        CatDraft(
-          catId: widget.initial?.catId,
+    setState(() => _saving = true);
+    try {
+      if (_isEditing) {
+        final map = await CatApiService.updateCatWeight(
+          widget.initial!.catId,
+          _weightKg,
+        );
+        if (!mounted) return;
+        Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
+      } else {
+        final map = await CatApiService.createCat(
           name: _nameCtrl.text.trim(),
-          breed: _breed!,
-          birthDate: _birth!,
+          breedId: _breed!.breedId!,
+          birthDateIso: _birthIso(_birth!),
           isFemale: _isFemale!,
-          isNeutered: _isNeutered!,
           weightKg: _weightKg,
-        ),
-      ),
-    );
+          isNeutered: _isNeutered!,
+        );
+        if (!mounted) return;
+        Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
+      }
+    } on CatApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -612,7 +647,33 @@ class _AddCatScreenState extends State<AddCatScreen> {
         ],
       ),
       body: SafeArea(
-        child: Column(
+        child: !_isEditing && _breedsLoading
+            ? const Center(child: CircularProgressIndicator())
+            : !_isEditing && !_breedsLoading && _breedOptions.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _breedsLoadError ?? 'Irklar yüklenemedi.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: _kTitleColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          TextButton(
+                            onPressed: () => _loadBreeds(),
+                            child: const Text('Yeniden dene'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
@@ -632,11 +693,13 @@ class _AddCatScreenState extends State<AddCatScreen> {
                       label: 'İsim',
                       child: TextField(
                         controller: _nameCtrl,
+                        readOnly: _isEditing,
                         maxLength: 30,
                         textInputAction: TextInputAction.next,
                         decoration: _inputDecoration(
                           hintText: 'Kedinizin adı',
                           counterText: '',
+                          fillMuted: _isEditing,
                         ),
                       ),
                     ),
@@ -645,6 +708,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                       child: _SelectRow(
                         text: _breed?.labelTr ?? 'İrk seç',
                         trailing: Icons.keyboard_arrow_down_rounded,
+                        enabled: !_isEditing,
                         onTap: () => _pickBreed(context),
                       ),
                     ),
@@ -660,6 +724,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                                   : 'Tarih seç',
                               trailing: Icons.calendar_today_rounded,
                               dense: true,
+                              enabled: !_isEditing,
                               onTap: _pickBirth,
                             ),
                           ),
@@ -686,6 +751,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                             ? 'Seç'
                             : (_isFemale! ? 'Kız' : 'Erkek'),
                         trailing: Icons.keyboard_arrow_down_rounded,
+                        enabled: !_isEditing,
                         onTap: _pickGender,
                       ),
                     ),
@@ -696,6 +762,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                             ? 'Seç'
                             : (_isNeutered! ? 'Kısır' : 'Kısır değil'),
                         trailing: Icons.keyboard_arrow_down_rounded,
+                        enabled: !_isEditing,
                         onTap: _pickNeutered,
                       ),
                     ),
@@ -709,22 +776,32 @@ class _AddCatScreenState extends State<AddCatScreen> {
                 height: 52,
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _save,
+                  onPressed: _saving ? null : _save,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _kAccentPink,
                     foregroundColor: Colors.white,
                     elevation: 0,
+                    disabledBackgroundColor: Colors.grey.shade400,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    'Kaydet',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 17,
-                    ),
-                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Kaydet',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17,
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -742,12 +819,13 @@ class _AddCatScreenState extends State<AddCatScreen> {
   InputDecoration _inputDecoration({
     required String hintText,
     String? counterText,
+    bool fillMuted = false,
   }) {
     return InputDecoration(
       hintText: hintText,
       counterText: counterText,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: fillMuted ? const Color(0xFFF0EEEB) : Colors.white,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: 16,
         vertical: 16,
@@ -797,12 +875,14 @@ class _SelectRow extends StatelessWidget {
     required this.trailing,
     required this.onTap,
     this.dense = false,
+    this.enabled = true,
   });
 
   final String text;
   final IconData trailing;
   final VoidCallback onTap;
   final bool dense;
+  final bool enabled;
 
   static const Set<String> _placeholders = {
     'İrk seç',
@@ -812,39 +892,53 @@ class _SelectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final borderColor =
+        enabled ? _kFieldBorder : Colors.grey.shade400.withValues(alpha: 0.6);
+    final child = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: dense ? 14 : 16,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor),
+        color: enabled ? Colors.white : const Color(0xFFF5F4F2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: dense ? 14 : 15,
+                color: enabled
+                    ? (_placeholders.contains(text)
+                        ? Colors.grey.shade600
+                        : _kTitleColor)
+                    : Colors.grey.shade700,
+              ),
+            ),
+          ),
+          if (enabled)
+            Icon(trailing, color: _kTitleColor, size: 22)
+          else
+            Icon(Icons.lock_outline_rounded, color: Colors.grey.shade600, size: 20),
+        ],
+      ),
+    );
+
+    if (!enabled) {
+      return child;
+    }
+
     return Material(
-      color: Colors.white,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: dense ? 14 : 16,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _kFieldBorder),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: dense ? 14 : 15,
-                    color: _placeholders.contains(text)
-                        ? Colors.grey.shade600
-                        : _kTitleColor,
-                  ),
-                ),
-              ),
-              Icon(trailing, color: _kTitleColor, size: 22),
-            ],
-          ),
-        ),
+        child: child,
       ),
     );
   }

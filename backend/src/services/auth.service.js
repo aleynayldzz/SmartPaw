@@ -505,10 +505,29 @@ async function resetPassword(body) {
   };
 }
 
+/**
+ * `Authorization: Bearer <accessToken>` başlığından kullanıcıyı döndürür; geçersizse null.
+ */
+function verifyAccessToken(authHeader) {
+  const raw = String(authHeader ?? "").trim();
+  const m = /^Bearer\s+(.+)$/i.exec(raw);
+  if (!m) return null;
+  try {
+    const payload = jwt.verify(m[1].trim(), getJwtSecret());
+    if (payload.typ !== "access") return null;
+    const sub = Number(payload.sub);
+    if (!Number.isFinite(sub) || sub <= 0) return null;
+    return { userId: sub, email: payload.email };
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   signup,
   verifyEmail,
   login,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  verifyAccessToken
 };
