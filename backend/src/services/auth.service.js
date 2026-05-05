@@ -90,8 +90,8 @@ async function signup(body) {
 
     const insertedUserRes = await client.query(
       `
-        INSERT INTO users (name, surname, email, password_hash, is_verified, avatar_gender)
-        VALUES ($1, $2, $3, $4, false, 'unspecified')
+        INSERT INTO users (name, surname, email, password_hash, is_verified)
+        VALUES ($1, $2, $3, $4, false)
         RETURNING user_id, email, is_verified
         `,
       [name.trim(), surname.trim(), normalizedEmail, passwordHash]

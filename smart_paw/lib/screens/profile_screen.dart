@@ -4,14 +4,9 @@ import '../services/auth_session.dart';
 import 'login_screen.dart';
 import 'my_cats_screen.dart';
 
-/// Profil görünümü. [useFemaleAvatar] `true` ise `kızavatar.png`, aksi halde `erkekavatar.png` kullanılır.
+/// Profil görünümü; tüm kullanıcılar için `assets/images/userlogo.png` kullanılır.
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({
-    super.key,
-    this.useFemaleAvatar = true,
-  });
-
-  final bool useFemaleAvatar;
+  const ProfileScreen({super.key});
 
   static const Color _headerPink = Color(0xFFF5C7C1);
   static const Color _creamBg = Color(0xFFFFFBF7);
@@ -20,9 +15,7 @@ class ProfileScreen extends StatelessWidget {
   static const double _headerHeight = 132;
   static const double _avatarSize = 96;
 
-  String get _avatarAsset => useFemaleAvatar
-      ? 'assets/images/kızavatar.png'
-      : 'assets/images/erkekavatar.png';
+  static const String _avatarAsset = 'assets/images/userlogo.png';
 
   String get _displayName {
     final n = AuthSession.user?['name']?.toString().trim();
@@ -69,24 +62,23 @@ class ProfileScreen extends StatelessWidget {
                       'Profil',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: _titleColor,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        color: _titleColor,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
               ),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(
-                    top: avatarRadius + 4,
-                  ),
+                  padding: EdgeInsets.only(top: avatarRadius + 4),
                   child: Column(
                     children: [
                       Text(
                         _displayName,
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
                               color: _titleColor,
                               fontWeight: FontWeight.w800,
                             ),
@@ -155,6 +147,11 @@ class ProfileScreen extends StatelessWidget {
                   child: Image.asset(
                     _avatarAsset,
                     fit: BoxFit.cover,
+                    // Büyük PNG’yi tam çözünürlükte decode etmeyi engeller (bellek / ilk kare).
+                    cacheWidth: (MediaQuery.devicePixelRatioOf(context) * _avatarSize)
+                        .round(),
+                    cacheHeight: (MediaQuery.devicePixelRatioOf(context) * _avatarSize)
+                        .round(),
                     errorBuilder: (_, _, _) => ColoredBox(
                       color: _headerPink.withValues(alpha: 0.5),
                       child: const Icon(Icons.person, size: 48),
@@ -197,10 +194,7 @@ class _ProfileTile extends StatelessWidget {
           fontSize: 16,
         ),
       ),
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: _titleColor,
-      ),
+      trailing: const Icon(Icons.chevron_right_rounded, color: _titleColor),
       onTap: onTap,
     );
   }
