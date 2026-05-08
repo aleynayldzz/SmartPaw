@@ -17,8 +17,23 @@ class _HomeScreenState extends State<HomeScreen> {
   static const int _profileTabIndex = 4;
 
   int _navIndex = 0;
-  final int _completedDailyTasks = 5;
-  final int _totalDailyTasks = 7;
+  late final List<_DailyTaskItem> _dailyTasks = const [
+    _DailyTaskItem(title: 'Malt Takviyesi Ver'),
+    _DailyTaskItem(title: 'Mama ve Suyu Tazele'),
+    _DailyTaskItem(title: 'Tüylerini Tara'),
+    _DailyTaskItem(
+      title: 'Kulak, Burun ve Göz Temizliği',
+    ),
+    _DailyTaskItem(title: 'İlacını Ver'),
+    _DailyTaskItem(title: 'Kum Kabını Temizle'),
+    _DailyTaskItem(title: 'Oyun Zamanı'),
+  ];
+
+  late final List<bool> _dailyTaskDone =
+      List<bool>.filled(_dailyTasks.length, false);
+
+  int get _completedDailyTasks => _dailyTaskDone.where((x) => x).length;
+  int get _totalDailyTasks => _dailyTasks.length;
 
   /// Registered profile name: first token for a short greeting (e.g. "Aleyna 👋").
   String get _profileGreetingName {
@@ -94,6 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         greetingName: _profileGreetingName,
                         completed: _completedDailyTasks,
                         total: _totalDailyTasks,
+                        tasks: _dailyTasks,
+                        taskDone: _dailyTaskDone,
+                        onToggleTask: (i) => setState(() {
+                          _dailyTaskDone[i] = !_dailyTaskDone[i];
+                        }),
                       )
                     : Center(
                         child: Padding(
@@ -133,11 +153,17 @@ class _HomeGreetingScroll extends StatelessWidget {
     required this.greetingName,
     required this.completed,
     required this.total,
+    required this.tasks,
+    required this.taskDone,
+    required this.onToggleTask,
   });
 
   final String greetingName;
   final int completed;
   final int total;
+  final List<_DailyTaskItem> tasks;
+  final List<bool> taskDone;
+  final ValueChanged<int> onToggleTask;
 
   static const Color _headingColor = Color(0xFF2C2825);
 
@@ -169,6 +195,36 @@ class _HomeGreetingScroll extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _DailyProgressHeader(completed: completed, total: total),
+          const SizedBox(height: 22),
+          const Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: 'Günlük Bakım ',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: _headingColor,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                TextSpan(
+                  text: ' ✨',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: _headingColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DailyTaskList(
+            tasks: tasks,
+            done: taskDone,
+            onToggle: onToggleTask,
+          ),
         ],
       ),
     );
@@ -183,8 +239,8 @@ class _DailyProgressHeader extends StatelessWidget {
 
   static const Color _textColor = Color(0xFF2C2825);
   static const Color _counterColor = Color(0xFF3C3430);
-  static const Color _track = Color(0xFFF2D7D4); // pastel pink track (was yellow-ish in ref)
-  static const Color _fill = Color(0xFFE5A09B); // primary pink fill
+  static const Color _track = Color(0xFFF3D6D3); // pastel pink track
+  static const Color _fill = Color(0xFFE9A5A1); // app primary pink
   static const double _barHeight = 8;
 
   double get _ratio {
@@ -196,14 +252,14 @@ class _DailyProgressHeader extends StatelessWidget {
 
   String get _subtitle {
     final pct = (_ratio * 100).round();
-    if (pct <= 0) return 'Start your day! ✨';
-    if (pct >= 100) return 'All tasks done! Great job! 🐾';
-    return 'You’re almost done for today ✨';
+    if (pct <= 0) return 'Kedinizin bakım rutinine başlayın! 🐱';
+    if (pct >= 100) return 'Tüm görevler tamamlandı! Harikasın! 😸🎉';
+    return 'Bugünkü işiniz neredeyse bitti! 🐈‍⬛🐾';
   }
 
   @override
   Widget build(BuildContext context) {
-    final counter = '$completed of $total tasks completed';
+    final counter = '$completed / $total görev tamamlandı';
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -226,7 +282,7 @@ class _DailyProgressHeader extends StatelessWidget {
                 // Reference bar is not full-bleed; keep it compact.
                 final barW = constraints.maxWidth * 0.92;
                 return TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0, end: _ratio),
+                  tween: Tween<double>(end: _ratio),
                   duration: const Duration(milliseconds: 450),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, _) {
@@ -287,4 +343,85 @@ class _DailyProgressHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DailyTaskList extends StatelessWidget {
+  const _DailyTaskList({
+    required this.tasks,
+    required this.done,
+    required this.onToggle,
+  });
+
+  final List<_DailyTaskItem> tasks;
+  final List<bool> done;
+  final ValueChanged<int> onToggle;
+
+  static const Color _text = Color(0xFF2C2825);
+  static const Color _doneText = Color(0xFF9A8E88);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List<Widget>.generate(tasks.length, (i) {
+        final t = tasks[i];
+        final isDone = done[i];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => onToggle(i),
+            child: Row(
+              children: [
+                _SoftCheckbox(value: isDone),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    t.title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700,
+                      color: isDone ? _doneText : _text,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _SoftCheckbox extends StatelessWidget {
+  const _SoftCheckbox({required this.value});
+
+  final bool value;
+
+  static const Color _pink = Color(0xFFE9A5A1);
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      height: 22,
+      width: 22,
+      decoration: BoxDecoration(
+        color: value ? _pink : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _pink, width: 2),
+      ),
+      child: value
+          ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+          : null,
+    );
+  }
+}
+
+class _DailyTaskItem {
+  const _DailyTaskItem({required this.title});
+
+  final String title;
 }
