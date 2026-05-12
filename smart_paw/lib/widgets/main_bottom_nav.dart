@@ -11,18 +11,18 @@ class MainBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onSelect;
 
-  static const _bg = Color(0xFFFDFBF0);
-  static const _fg = Color(0xFF333333);
+  static const _bg = Color(0xFFFFF8F9);
   static const _fgMuted = Color(0xFF8A8A8A);
+  static const _accentPink = Color(0xFFD47A85);
 
   @override
   Widget build(BuildContext context) {
     final items = <_NavSpec>[
-      (label: 'Home', icon: Icons.home_outlined),
-      (label: 'Health', icon: Icons.favorite_border),
-      (label: 'Care', icon: Icons.pets),
-      (label: 'Analytics', icon: Icons.bar_chart),
-      (label: 'Profile', icon: Icons.person_outline),
+      (label: 'Anasayfa', icon: Icons.home_outlined),
+      (label: 'Sağlık', icon: Icons.favorite_border),
+      (label: 'Bakım', icon: Icons.pets),
+      (label: 'Analiz', icon: Icons.bar_chart),
+      (label: 'Profil', icon: Icons.person_outline),
     ];
 
     return ClipRRect(
@@ -67,7 +67,7 @@ class _NavTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? MainBottomNav._fg : MainBottomNav._fgMuted;
+    final color = selected ? MainBottomNav._accentPink : MainBottomNav._fgMuted;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
