@@ -7,7 +7,7 @@ import '../data/cat_breeds.dart';
 import '../models/cat_profile.dart';
 import '../services/cat_api_service.dart';
 
-const _kCreamBg = Color(0xFFF9F6F0);
+const _kCreamBg = Color(0xFFFFF9F1);
 const _kTitleColor = Color(0xFF3E3E3E);
 const _kAccentPink = Color(0xFFD88A92);
 const _kFieldBorder = Color(0xFF5C5C5C);

@@ -12,7 +12,7 @@ class MainBottomNav extends StatelessWidget {
   final ValueChanged<int> onSelect;
 
   static const _bg = Color(0xFFFFF8F9);
-  static const _fgMuted = Color(0xFF8A8A8A);
+  static const _fgMuted = Color(0xFF2C2825);
   static const _accentPink = Color(0xFFD47A85);
 
   @override

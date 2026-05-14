@@ -5,7 +5,7 @@ class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
   static const Color _titleColor = Color(0xFF2C2825);
-  static const Color _creamBg = Color(0xFFFFFBF7);
+  static const Color _creamBg = Color(0xFFFFF9F1);
 
   @override
   Widget build(BuildContext context) {

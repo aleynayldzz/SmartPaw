@@ -9,7 +9,7 @@ class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   static const Color _headerPink = Color(0xFFF5C7C1);
-  static const Color _creamBg = Color(0xFFFFFBF7);
+  static const Color _creamBg = Color(0xFFFFF9F1);
   static const Color _titleColor = Color(0xFF3E3E3E);
 
   static const double _headerHeight = 132;

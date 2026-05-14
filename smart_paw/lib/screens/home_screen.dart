@@ -6,6 +6,7 @@ import '../services/auth_session.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
 import 'add_vet_visit_screen.dart';
+import 'my_cats_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 
@@ -26,23 +27,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _DailyTaskItem(title: 'Malt Takviyesi Ver'),
     _DailyTaskItem(title: 'Mama ve Suyu Tazele'),
     _DailyTaskItem(title: 'Tüylerini Tara'),
-    _DailyTaskItem(
-      title: 'Kulak, Burun ve Göz Temizliği',
-    ),
+    _DailyTaskItem(title: 'Kulak, Burun ve Göz Temizliği'),
     _DailyTaskItem(title: 'İlacını Ver'),
     _DailyTaskItem(title: 'Kum Kabını Temizle'),
     _DailyTaskItem(title: 'Oyun Zamanı'),
   ];
 
-  late final List<bool> _dailyTaskDone =
-      List<bool>.filled(_dailyTasks.length, false);
+  late final List<bool> _dailyTaskDone = List<bool>.filled(
+    _dailyTasks.length,
+    false,
+  );
 
   int get _completedDailyTasks => _dailyTaskDone.where((x) => x).length;
   int get _totalDailyTasks => _dailyTasks.length;
 
-  static const Color _quickActionPink = Color(0xFFFFDEE4);
-  static const Color _bgTop = Color(0xFFFFF7F8);
-  static const Color _bgBottom = Color(0xFFFFEEF1);
+  static const Color _pageBackground = Color(0xFFFFF9F1);
 
   /// Registered profile name: first token for a short greeting (e.g. "Aleyna 👋").
   String get _profileGreetingName {
@@ -58,9 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       if (widget.showLoginSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Giriş başarılı.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Giriş başarılı.')));
       }
 
       final isVerified = AuthSession.user?['is_verified'];
@@ -77,9 +76,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openQuickAddCat() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const AddCatScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute<void>(builder: (_) => const AddCatScreen()));
   }
 
   void _openNotifications() {
@@ -91,6 +90,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openAddVetVisit() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const AddVetVisitScreen()),
+    );
+  }
+
+  void _openMyCats() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const MyCatsScreen()),
+    );
+  }
+
+  void _showComingSoon(String label) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label çok yakında.')),
     );
   }
 
@@ -116,18 +128,12 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _navIndex,
         onSelect: (i) => setState(() => _navIndex = i),
       ),
+      backgroundColor: _pageBackground,
       body: _navIndex == _profileTabIndex
           ? const ProfileScreen()
-          : Container(
+          : SizedBox(
               width: double.infinity,
               height: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [_bgTop, _bgBottom],
-                ),
-              ),
               child: SafeArea(
                 child: _navIndex == 0
                     ? _HomeGreetingScroll(
@@ -139,10 +145,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         onToggleTask: (i) => setState(() {
                           _dailyTaskDone[i] = !_dailyTaskDone[i];
                         }),
-                        quickActionBg: _quickActionPink,
+                        onQuickMyCats: _openMyCats,
                         onQuickAddCat: _openQuickAddCat,
                         onQuickNotifications: _openNotifications,
                         onQuickAddVetVisit: _openAddVetVisit,
+                        onQuickVaccine: () =>
+                            _showComingSoon('Aşı ekleme'),
+                        onQuickMedication: () =>
+                            _showComingSoon('İlaç ekleme'),
                       )
                     : Center(
                         child: Padding(
@@ -185,10 +195,12 @@ class _HomeGreetingScroll extends StatelessWidget {
     required this.tasks,
     required this.taskDone,
     required this.onToggleTask,
-    required this.quickActionBg,
+    required this.onQuickMyCats,
     required this.onQuickAddCat,
     required this.onQuickNotifications,
     required this.onQuickAddVetVisit,
+    required this.onQuickVaccine,
+    required this.onQuickMedication,
   });
 
   final String greetingName;
@@ -197,28 +209,36 @@ class _HomeGreetingScroll extends StatelessWidget {
   final List<_DailyTaskItem> tasks;
   final List<bool> taskDone;
   final ValueChanged<int> onToggleTask;
-  final Color quickActionBg;
+  final VoidCallback onQuickMyCats;
   final VoidCallback onQuickAddCat;
   final VoidCallback onQuickNotifications;
   final VoidCallback onQuickAddVetVisit;
+  final VoidCallback onQuickVaccine;
+  final VoidCallback onQuickMedication;
 
   static const Color _headingColor = Color(0xFF2C2825);
-
-  /// Ana vurgu: turuncunun karşılığı koyu pembe.
-  static const Color _accentPink = Color(0xFFD47A85);
+  static const Color _accentYellow = Color(0xFFE9B23F);
 
   @override
   Widget build(BuildContext context) {
     const greetingStyle = TextStyle(
-      fontSize: 30,
-      fontWeight: FontWeight.w800,
-      height: 1.15,
+      fontSize: 32,
+      fontWeight: FontWeight.w900,
+      height: 1.1,
       letterSpacing: -0.6,
       color: _headingColor,
     );
 
+    const sectionTitleStyle = TextStyle(
+      fontSize: 24,
+      fontWeight: FontWeight.w800,
+      color: _headingColor,
+      letterSpacing: -0.3,
+    );
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 100),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(22, 28, 22, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -233,57 +253,39 @@ class _HomeGreetingScroll extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _DailyProgressHeader(completed: completed, total: total),
-          const SizedBox(height: 18),
+          const SizedBox(height: 26),
           Text.rich(
             TextSpan(
               children: [
-                const TextSpan(
-                  text: 'Günlük Bakım ',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: _headingColor,
-                    letterSpacing: -0.2,
-                  ),
-                ),
+                const TextSpan(text: 'Günlük Bakım ', style: sectionTitleStyle),
                 WidgetSpan(
                   alignment: PlaceholderAlignment.middle,
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 2, bottom: 1),
+                    padding: const EdgeInsets.only(left: 2, bottom: 4),
                     child: Icon(
                       Icons.auto_awesome_rounded,
-                      size: 22,
-                      color: _accentPink,
+                      size: 24,
+                      color: _accentYellow,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          _DailyTaskList(
-            tasks: tasks,
-            done: taskDone,
-            onToggle: onToggleTask,
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Hızlı İşlemler',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: _headingColor,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _QuickActionsRow(
-            cardBg: quickActionBg,
+          const SizedBox(height: 14),
+          _DailyTaskList(tasks: tasks, done: taskDone, onToggle: onToggleTask),
+          const SizedBox(height: 28),
+          const Text('Hızlı İşlemler', style: sectionTitleStyle),
+          const SizedBox(height: 16),
+          _QuickActionsGrid(
+            onMyCats: onQuickMyCats,
             onAddCat: onQuickAddCat,
             onNotifications: onQuickNotifications,
-            onAddVetVisit: onQuickAddVetVisit,
+            onVetVisit: onQuickAddVetVisit,
+            onVaccine: onQuickVaccine,
+            onMedication: onQuickMedication,
           ),
         ],
       ),
@@ -291,73 +293,112 @@ class _HomeGreetingScroll extends StatelessWidget {
   }
 }
 
-/// Üç kompakt kare kart (referans ölçülerine yakın).
-class _QuickActionsRow extends StatelessWidget {
-  const _QuickActionsRow({
-    required this.cardBg,
+/// 3×2 hızlı işlemler (yalnızca bu bölüm yeni ızgara düzeni).
+class _QuickActionsGrid extends StatelessWidget {
+  const _QuickActionsGrid({
+    required this.onMyCats,
     required this.onAddCat,
     required this.onNotifications,
-    required this.onAddVetVisit,
+    required this.onVetVisit,
+    required this.onVaccine,
+    required this.onMedication,
   });
 
-  final Color cardBg;
+  final VoidCallback onMyCats;
   final VoidCallback onAddCat;
   final VoidCallback onNotifications;
-  final VoidCallback onAddVetVisit;
+  final VoidCallback onVetVisit;
+  final VoidCallback onVaccine;
+  final VoidCallback onMedication;
 
   static const Color _ink = Color(0xFF2C2825);
+  /// Referans #E39695 tonunda açık kart zemini
+  static const Color _tileBg = Color(0xFFF5DADA);
+
+  static const double _kIconSize = 36;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 10.0;
-        final maxW = constraints.maxWidth;
-        final cardSize = math.min(86.0, (maxW - gap * 2) / 3).clamp(72.0, 88.0);
-        final iconBox = cardSize * 0.38;
+        final w = constraints.maxWidth;
+        final cellW = (w - gap * 2) / 3;
+        final cellH = math.max(118.0, cellW * 1.14);
 
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Widget tile({
+          required String label,
+          required Widget icon,
+          required VoidCallback onTap,
+        }) {
+          return _QuickActionCard(
+            width: cellW,
+            height: cellH,
+            onTap: onTap,
+            cardBg: _tileBg,
+            label: label,
+            icon: icon,
+          );
+        }
+
+        return Column(
           children: [
-            _QuickActionCard(
-              size: cardSize,
-              onTap: onAddCat,
-              cardBg: cardBg,
-              label: 'Kedi Ekle',
-              icon: SizedBox(
-                height: iconBox,
-                width: iconBox,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(Icons.pets_outlined, color: _ink, size: iconBox * 0.88),
-                    Positioned(
-                      right: -1,
-                      bottom: -1,
-                      child: Icon(
-                        Icons.add_circle_outline_rounded,
-                        color: _ink,
-                        size: iconBox * 0.42,
-                      ),
-                    ),
-                  ],
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                tile(
+                  label: 'Kedilerim',
+                  icon: _TwoCatsIcon(color: _ink, iconSize: _kIconSize),
+                  onTap: onMyCats,
                 ),
-              ),
+                tile(
+                  label: 'Kedi Ekle',
+                  icon: _PawWithPlusIcon(color: _ink, iconSize: _kIconSize),
+                  onTap: onAddCat,
+                ),
+                tile(
+                  label: 'Bildirimler',
+                  icon: Icon(
+                    Icons.notifications_outlined,
+                    color: _ink,
+                    size: _kIconSize,
+                  ),
+                  onTap: onNotifications,
+                ),
+              ],
             ),
-            _QuickActionCard(
-              size: cardSize,
-              onTap: onNotifications,
-              cardBg: cardBg,
-              label: 'Bildirimler',
-              icon: Icon(Icons.notifications_outlined, color: _ink, size: iconBox * 0.95),
-            ),
-            _QuickActionCard(
-              size: cardSize,
-              onTap: onAddVetVisit,
-              cardBg: cardBg,
-              label: 'Veteriner\nziyareti',
-              icon: Icon(Icons.medical_services_outlined, color: _ink, size: iconBox * 0.88),
+            const SizedBox(height: gap),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                tile(
+                  label: 'Veteriner\nziyareti ekle',
+                  icon: Icon(
+                    Icons.medical_services_outlined,
+                    color: _ink,
+                    size: _kIconSize,
+                  ),
+                  onTap: onVetVisit,
+                ),
+                tile(
+                  label: 'Aşı Ekle',
+                  icon: Icon(
+                    Icons.vaccines_outlined,
+                    color: _ink,
+                    size: _kIconSize,
+                  ),
+                  onTap: onVaccine,
+                ),
+                tile(
+                  label: 'İlaç Ekle',
+                  icon: Icon(
+                    Icons.medication_liquid_outlined,
+                    color: _ink,
+                    size: _kIconSize,
+                  ),
+                  onTap: onMedication,
+                ),
+              ],
             ),
           ],
         );
@@ -366,22 +407,92 @@ class _QuickActionsRow extends StatelessWidget {
   }
 }
 
+class _TwoCatsIcon extends StatelessWidget {
+  const _TwoCatsIcon({required this.color, required this.iconSize});
+
+  final Color color;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final pet = iconSize * 0.72;
+    final w = iconSize * 1.05;
+    final h = iconSize * 0.88;
+    return SizedBox(
+      width: w,
+      height: h,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: pet * 0.2,
+            child: Icon(Icons.pets_outlined, color: color, size: pet),
+          ),
+          Positioned(
+            left: pet * 0.48,
+            top: 0,
+            child: Icon(Icons.pets_outlined, color: color, size: pet),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pati + üst köşede artı ikonu (referans "Add Cat" karteıdaki gibi).
+class _PawWithPlusIcon extends StatelessWidget {
+  const _PawWithPlusIcon({required this.color, required this.iconSize});
+
+  final Color color;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final paw = iconSize * 0.92;
+    final plus = iconSize * 0.48;
+    return SizedBox(
+      width: iconSize * 1.05,
+      height: iconSize * 1.05,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.pets_outlined, color: color, size: paw),
+          Positioned(
+            right: -2,
+            bottom: -1,
+            child: Icon(
+              Icons.add_circle_outline_rounded,
+              color: color,
+              size: plus,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _QuickActionCard extends StatelessWidget {
   const _QuickActionCard({
-    required this.size,
+    required this.width,
+    required this.height,
     required this.onTap,
     required this.cardBg,
     required this.label,
     required this.icon,
   });
 
-  final double size;
+  final double width;
+  final double height;
   final VoidCallback onTap;
   final Color cardBg;
   final String label;
   final Widget icon;
 
-  static const Color _label = Color(0xFF4A4543);
+  static const Color _labelColor = Color(0xFF3A302D);
+  static const double _radius = 20;
 
   @override
   Widget build(BuildContext context) {
@@ -389,38 +500,36 @@ class _QuickActionCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_radius),
         child: Ink(
-          width: size,
-          height: size,
+          width: width,
+          height: height,
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(_radius),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(6, size * 0.12, 6, size * 0.1),
+            padding: const EdgeInsets.fromLTRB(6, 12, 6, 10),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                icon,
-                SizedBox(height: size * 0.08),
+                Expanded(child: Center(child: icon)),
                 Text(
                   label,
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: math.max(10.5, size * 0.135),
-                    height: 1.1,
-                    fontWeight: FontWeight.w700,
-                    color: _label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                    color: _labelColor,
                   ),
                 ),
               ],
@@ -440,9 +549,9 @@ class _DailyProgressHeader extends StatelessWidget {
 
   static const Color _textColor = Color(0xFF2C2825);
   static const Color _counterColor = Color(0xFF3C3430);
-  static const Color _track = Color(0xFFF2D0D5); // açık pembe iz (bej yerine)
-  static const Color _fill = Color(0xFFD47A85); // koyu vurgu pembe (turuncu karşılığı)
-  static const double _barHeight = 8;
+  static const Color _track = Color(0xFFF6DDE0);
+  static const Color _fill = Color(0xFFE89AA3);
+  static const double _barHeight = 14;
 
   double get _ratio {
     final t = total <= 0 ? 0 : total;
@@ -464,84 +573,90 @@ class _DailyProgressHeader extends StatelessWidget {
 
     return Align(
       alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 330),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              counter,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: _counterColor,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            counter,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: _counterColor,
             ),
-            const SizedBox(height: 10),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                // Reference bar is not full-bleed; keep it compact.
-                final barW = constraints.maxWidth * 0.92;
-                return TweenAnimationBuilder<double>(
-                  tween: Tween<double>(end: _ratio),
-                  duration: const Duration(milliseconds: 450),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, _) {
-                    final fillW = (barW * value).clamp(0.0, barW);
-                    final dotSize = 10.0;
-                    final dotLeft = (fillW - (dotSize / 2)).clamp(0.0, barW - dotSize);
-                    return SizedBox(
-                      width: barW,
-                      child: Stack(
-                        children: [
-                          Container(
-                            height: _barHeight,
-                            width: double.infinity,
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final barW = constraints.maxWidth;
+              return TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: _ratio),
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) {
+                  final fillW = (barW * value).clamp(0.0, barW);
+                  const dotSize = 18.0;
+                  final dotLeft = (fillW - (dotSize / 2)).clamp(
+                    0.0,
+                    barW - dotSize,
+                  );
+                  return SizedBox(
+                    width: barW,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          height: _barHeight,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: _track,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        Container(
+                          height: _barHeight,
+                          width: fillW,
+                          decoration: BoxDecoration(
+                            color: _fill,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        Positioned(
+                          left: dotLeft,
+                          top: (_barHeight - dotSize) / 2,
+                          child: Container(
+                            height: dotSize,
+                            width: dotSize,
                             decoration: BoxDecoration(
-                              color: _track,
-                              borderRadius: BorderRadius.circular(999),
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: _fill, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _fill.withValues(alpha: 0.35),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                           ),
-                          Container(
-                            height: _barHeight,
-                            width: fillW,
-                            decoration: BoxDecoration(
-                              color: _fill,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                          Positioned(
-                            left: dotLeft,
-                            top: (_barHeight - dotSize) / 2,
-                            child: Container(
-                              height: dotSize,
-                              width: dotSize,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: _fill, width: 2),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _subtitle,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: _textColor,
             ),
-            const SizedBox(height: 10),
-            Text(
-              _subtitle,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                fontStyle: FontStyle.italic,
-                color: _textColor.withValues(alpha: 0.88),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -568,20 +683,20 @@ class _DailyTaskList extends StatelessWidget {
         final t = tasks[i];
         final isDone = done[i];
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 14),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: () => onToggle(i),
             child: Row(
               children: [
                 _SoftCheckbox(value: isDone),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Text(
                     t.title,
                     style: TextStyle(
-                      fontSize: 15.5,
-                      height: 1.18,
+                      fontSize: 17.5,
+                      height: 1.22,
                       fontWeight: FontWeight.w700,
                       color: isDone ? _doneText : _text,
                     ),
@@ -601,26 +716,26 @@ class _SoftCheckbox extends StatelessWidget {
 
   final bool value;
 
-  static const Color _pink = Color(0xFFE9A5A1);
-  static const Color _uncheckedBorder = Color(0xFFB9A6A2);
+  static const Color _pink = Color(0xFFE89AA3);
+  static const Color _uncheckedBorder = Color(0xFFC9B3AE);
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
-      height: 22,
-      width: 22,
+      height: 24,
+      width: 24,
       decoration: BoxDecoration(
-        color: value ? _pink : Colors.white.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(6),
+        color: value ? _pink : Colors.white.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(7),
         border: Border.all(
           color: value ? _pink : _uncheckedBorder,
-          width: value ? 2 : 1.5,
+          width: value ? 2 : 1.6,
         ),
       ),
       child: value
-          ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+          ? const Icon(Icons.check_rounded, size: 18, color: Colors.white)
           : null,
     );
   }

@@ -18,7 +18,7 @@ class VerificationScreen extends StatefulWidget {
 class _VerificationScreenState extends State<VerificationScreen> {
   static const int _digitCount = 6;
 
-  static const Color _creamBackground = Color(0xFFF7F3ED);
+  static const Color _creamBackground = Color(0xFFFFF9F1);
   static const Color _titleColor = Color(0xFF2B1F1C);
   static const Color _cellBorder = Color(0xFFE5C4BE);
   static const Color _cellFill = Color(0xFFFFF8F6);
