@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../services/auth_api_service.dart';
 import '../services/auth_session.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
@@ -43,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const Color _pageBackground = Color(0xFFFFF9F1);
 
-  /// Registered profile name: first token for a short greeting (e.g. "Aleyna 👋").
+  /// Profil adı: kayıtlı `name` alanından kısa selamlama (ör. "Hello Aleyna 👋").
   String get _profileGreetingName {
     final raw = AuthSession.user?['name']?.toString().trim();
     if (raw == null || raw.isEmpty) return 'Misafir';
@@ -53,7 +54,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      final profileOk = await AuthApiService.refreshProfileFromServer();
+      if (profileOk && mounted) setState(() {});
+
       if (!mounted) return;
 
       if (widget.showLoginSuccess) {

@@ -1,4 +1,5 @@
 const express = require("express");
+const { requireAuth } = require("../middleware/auth.middleware");
 const authService = require("../services/auth.service");
 
 const router = express.Router();
@@ -20,6 +21,11 @@ router.post("/verify-email", (req, res) =>
 );
 
 router.post("/login", (req, res) => respond(res, authService.login(req.body)));
+
+/** Oturumdaki kullanıcının güncel profil alanları (ana ekran selamlaması vb.). */
+router.get("/me", requireAuth, (req, res) =>
+  respond(res, authService.getMe(req.auth.userId))
+);
 
 router.post("/forgot-password", (req, res) =>
   respond(res, authService.forgotPassword(req.body))

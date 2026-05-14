@@ -15,6 +15,8 @@ class ApiConfig {
 
   static Uri loginUri() => Uri.parse('$baseUrl/api/auth/login');
 
+  static Uri authMeUri() => Uri.parse('$baseUrl/api/auth/me');
+
   static Uri verifyEmailUri() => Uri.parse('$baseUrl/api/auth/verify-email');
 
   static Uri catBreedsUri() => Uri.parse('$baseUrl/api/cats/breeds');

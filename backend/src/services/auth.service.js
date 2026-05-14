@@ -279,6 +279,47 @@ async function verifyEmail(body) {
   };
 }
 
+async function getMe(userId) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid user." } };
+  }
+
+  const userRes = await pool.query(
+    `
+      SELECT user_id, email, name, surname, is_verified
+      FROM users
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+    [uid]
+  );
+  const row = userRes.rows[0];
+  if (!row) {
+    return { statusCode: 404, json: { ok: false, message: "User not found." } };
+  }
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      data: {
+        user: {
+          user_id: row.user_id,
+          email: row.email,
+          name: row.name,
+          surname: row.surname,
+          is_verified: row.is_verified
+        }
+      }
+    }
+  };
+}
+
 async function login(body) {
   if (!pool) {
     return { statusCode: 500, json: dbNotConfiguredPayload() };
@@ -529,5 +570,6 @@ module.exports = {
   login,
   forgotPassword,
   resetPassword,
-  verifyAccessToken
+  verifyAccessToken,
+  getMe
 };
