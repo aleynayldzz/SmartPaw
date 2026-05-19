@@ -134,7 +134,7 @@ class CatApiService {
     int catId,
     double weightKg,
   ) async {
-    final res = await http.patch(
+    final res = await http.put(
       ApiConfig.catUri(catId),
       headers: _headers(auth: true),
       body: jsonEncode({'weight': weightKg}),

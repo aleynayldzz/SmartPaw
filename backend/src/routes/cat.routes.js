@@ -37,7 +37,7 @@ router.get("/:catId", requireAuth, (req, res) =>
   respond(res, catService.getCat(req.auth.userId, req.params.catId))
 );
 
-router.patch("/:catId", requireAuth, (req, res) =>
+router.put("/:catId", requireAuth, (req, res) =>
   respond(res, catService.updateCat(req.auth.userId, req.params.catId, req.body))
 );
 
