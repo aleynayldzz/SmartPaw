@@ -41,6 +41,7 @@ function parseRoutineDate(value) {
   return { valid: true, value: s };
 }
 
+/** Kullanıcının herhangi bir kedisinde o gün için geçerli aktif ilaç + program var mı. */
 async function userHasActiveMedication(userId, dateStr) {
   const res = await pool.query(
     `
@@ -48,8 +49,10 @@ async function userHasActiveMedication(userId, dateStr) {
       SELECT 1
       FROM medications m
       INNER JOIN cats c ON c.cat_id = m.cat_id
+      INNER JOIN medication_schedules ms ON ms.medication_id = m.medication_id
       WHERE c.user_id = $1
         AND m.is_active = true
+        AND ms.is_active = true
         AND (m.start_date IS NULL OR m.start_date <= $2::date)
         AND (m.end_date IS NULL OR m.end_date >= $2::date)
     ) AS has_med

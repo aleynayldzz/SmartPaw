@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_api_service.dart';
 import '../services/auth_session.dart';
+import '../services/daily_routine_api_service.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
 import 'add_vet_visit_screen.dart';
@@ -24,24 +25,15 @@ class _HomeScreenState extends State<HomeScreen> {
   static const int _profileTabIndex = 4;
 
   int _navIndex = 0;
-  late final List<_DailyTaskItem> _dailyTasks = const [
-    _DailyTaskItem(title: 'Malt Takviyesi Ver'),
-    _DailyTaskItem(title: 'Mama ve Suyu Tazele'),
-    _DailyTaskItem(title: 'Tüylerini Tara'),
-    _DailyTaskItem(title: 'Kulak, Burun ve Göz Temizliği'),
-    _DailyTaskItem(title: 'İlacını Ver'),
-    _DailyTaskItem(title: 'Kum Kabını Temizle'),
-    _DailyTaskItem(title: 'Oyun Zamanı'),
-  ];
 
-  late final List<bool> _dailyTaskDone = List<bool>.filled(
-    _dailyTasks.length,
-    false,
-  );
-
-  int get _completedDailyTasks => _dailyTaskDone.where((x) => x).length;
-  int get _totalDailyTasks => _dailyTasks.length;
-
+  // Günlük bakım maddeleri artık API'den gelir (GET/PUT /api/daily-routine).
+  // Eski yerel liste (_dailyTasks + _dailyTaskDone) kaldırıldı.
+  bool _routineLoading = true;
+  String? _routineError;
+  String _routineDate = DailyRoutineApiService.todayLocalDateString();
+  List<DailyRoutineTask> _routineTasks = [];
+  int _routineCompleted = 0;
+  int _routineTotal = 0;
   static const Color _pageBackground = Color(0xFFFFF9F1);
 
   /// Profil adı: kayıtlı `name` alanından kısa selamlama (ör. "Hello Aleyna 👋").
@@ -58,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       final profileOk = await AuthApiService.refreshProfileFromServer();
+      await _loadDailyRoutine();
       if (profileOk && mounted) setState(() {});
 
       if (!mounted) return;
@@ -79,6 +72,81 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     });
+  }
+
+  Future<void> _loadDailyRoutine() async {
+    if (mounted) {
+      setState(() {
+        _routineLoading = true;
+        _routineError = null;
+      });
+    }
+
+    try {
+      final snap = await DailyRoutineApiService.fetchToday();
+      if (!mounted) return;
+      setState(() {
+        _routineDate = snap.date;
+        _routineTasks = snap.tasks;
+        _routineCompleted = snap.completedCount;
+        _routineTotal = snap.totalApplicable;
+        _routineLoading = false;
+        _routineError = null;
+      });
+    } on DailyRoutineApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _routineError = e.message;
+        _routineLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _routineError =
+            'Günlük bakım yüklenemedi. Sunucunun çalıştığından emin olun.';
+        _routineLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleRoutineTask(String taskKey) async {
+    if (_routineLoading) return;
+
+    final index = _routineTasks.indexWhere((t) => t.key == taskKey);
+    if (index < 0) return;
+
+    final previous = _routineTasks[index];
+    final newDone = !previous.isDone;
+
+    setState(() {
+      final next = List<DailyRoutineTask>.from(_routineTasks);
+      next[index] = previous.copyWith(isDone: newDone);
+      _routineTasks = next;
+      _routineCompleted += newDone ? 1 : -1;
+    });
+
+    try {
+      final snap = await DailyRoutineApiService.setTaskDone(
+        date: _routineDate,
+        taskKey: taskKey,
+        isDone: newDone,
+      );
+      if (!mounted) return;
+      setState(() {
+        _routineDate = snap.date;
+        _routineTasks = snap.tasks;
+        _routineCompleted = snap.completedCount;
+        _routineTotal = snap.totalApplicable;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      await _loadDailyRoutine();
+      if (!mounted) return;
+      final msg = e is DailyRoutineApiException
+          ? e.message
+          : 'Görev kaydedilemedi.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 
   void _openQuickAddCat() {
@@ -144,13 +212,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _navIndex == 0
                     ? _HomeGreetingScroll(
                         greetingName: _profileGreetingName,
-                        completed: _completedDailyTasks,
-                        total: _totalDailyTasks,
-                        tasks: _dailyTasks,
-                        taskDone: _dailyTaskDone,
-                        onToggleTask: (i) => setState(() {
-                          _dailyTaskDone[i] = !_dailyTaskDone[i];
-                        }),
+                        completed: _routineCompleted,
+                        total: _routineTotal,
+                        routineLoading: _routineLoading,
+                        routineError: _routineError,
+                        onRetryRoutine: _loadDailyRoutine,
+                        tasks: _routineTasks,
+                        onToggleTask: _toggleRoutineTask,
                         onQuickMyCats: _openMyCats,
                         onQuickAddCat: _openQuickAddCat,
                         onQuickNotifications: _openNotifications,
@@ -198,8 +266,10 @@ class _HomeGreetingScroll extends StatelessWidget {
     required this.greetingName,
     required this.completed,
     required this.total,
+    required this.routineLoading,
+    required this.routineError,
+    required this.onRetryRoutine,
     required this.tasks,
-    required this.taskDone,
     required this.onToggleTask,
     required this.onQuickMyCats,
     required this.onQuickAddCat,
@@ -212,9 +282,11 @@ class _HomeGreetingScroll extends StatelessWidget {
   final String greetingName;
   final int completed;
   final int total;
-  final List<_DailyTaskItem> tasks;
-  final List<bool> taskDone;
-  final ValueChanged<int> onToggleTask;
+  final bool routineLoading;
+  final String? routineError;
+  final VoidCallback onRetryRoutine;
+  final List<DailyRoutineTask> tasks;
+  final ValueChanged<String> onToggleTask;
   final VoidCallback onQuickMyCats;
   final VoidCallback onQuickAddCat;
   final VoidCallback onQuickNotifications;
@@ -281,7 +353,34 @@ class _HomeGreetingScroll extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _DailyTaskList(tasks: tasks, done: taskDone, onToggle: onToggleTask),
+          if (routineLoading && tasks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (routineError != null && tasks.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    routineError!,
+                    style: const TextStyle(
+                      color: Color(0xFF8B4513),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: onRetryRoutine,
+                    child: const Text('Yeniden dene'),
+                  ),
+                ],
+              ),
+            )
+          else
+            _DailyTaskList(tasks: tasks, onToggle: onToggleTask),
           const SizedBox(height: 28),
           const Text('Hızlı İşlemler', style: sectionTitleStyle),
           const SizedBox(height: 16),
@@ -669,15 +768,10 @@ class _DailyProgressHeader extends StatelessWidget {
 }
 
 class _DailyTaskList extends StatelessWidget {
-  const _DailyTaskList({
-    required this.tasks,
-    required this.done,
-    required this.onToggle,
-  });
+  const _DailyTaskList({required this.tasks, required this.onToggle});
 
-  final List<_DailyTaskItem> tasks;
-  final List<bool> done;
-  final ValueChanged<int> onToggle;
+  final List<DailyRoutineTask> tasks;
+  final ValueChanged<String> onToggle;
 
   static const Color _text = Color(0xFF2C2825);
   static const Color _doneText = Color(0xFF9A8E88);
@@ -685,34 +779,33 @@ class _DailyTaskList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: List<Widget>.generate(tasks.length, (i) {
-        final t = tasks[i];
-        final isDone = done[i];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => onToggle(i),
-            child: Row(
-              children: [
-                _SoftCheckbox(value: isDone),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    t.title,
-                    style: TextStyle(
-                      fontSize: 17.5,
-                      height: 1.22,
-                      fontWeight: FontWeight.w700,
-                      color: isDone ? _doneText : _text,
+      children: [
+        for (final t in tasks)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => onToggle(t.key),
+              child: Row(
+                children: [
+                  _SoftCheckbox(value: t.isDone),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      t.title,
+                      style: TextStyle(
+                        fontSize: 17.5,
+                        height: 1.22,
+                        fontWeight: FontWeight.w700,
+                        color: t.isDone ? _doneText : _text,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        );
-      }),
+      ],
     );
   }
 }
@@ -745,10 +838,4 @@ class _SoftCheckbox extends StatelessWidget {
           : null,
     );
   }
-}
-
-class _DailyTaskItem {
-  const _DailyTaskItem({required this.title});
-
-  final String title;
 }

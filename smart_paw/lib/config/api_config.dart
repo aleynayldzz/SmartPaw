@@ -17,6 +17,12 @@ class ApiConfig {
 
   static Uri authMeUri() => Uri.parse('$baseUrl/api/auth/me');
 
+  static Uri dailyRoutineUri({String? date}) {
+    final base = '$baseUrl/api/daily-routine';
+    if (date == null || date.isEmpty) return Uri.parse(base);
+    return Uri.parse(base).replace(queryParameters: {'date': date});
+  }
+
   static Uri verifyEmailUri() => Uri.parse('$baseUrl/api/auth/verify-email');
 
   static Uri catBreedsUri() => Uri.parse('$baseUrl/api/cats/breeds');
