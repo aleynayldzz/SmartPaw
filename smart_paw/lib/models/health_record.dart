@@ -20,17 +20,15 @@ class VaccineRecord {
 
 class VetAppointmentRecord {
   VetAppointmentRecord({
-    required this.visitDateTime,
-    required this.doctorName,
-    required this.clinicName,
+    String? id,
+    required this.visitDate,
     required this.reason,
     this.doctorNotes = '',
     this.nextVisitDate,
-  });
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
 
-  final DateTime visitDateTime;
-  final String doctorName;
-  final String clinicName;
+  final String id;
+  final DateTime visitDate;
   final String reason;
   final String doctorNotes;
   final DateTime? nextVisitDate;

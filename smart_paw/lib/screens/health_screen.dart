@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../models/health_record.dart';
 import '../utils/turkish_date_format.dart';
 import '../widgets/health/add_vaccine_sheet.dart';
+import '../widgets/health/add_vet_appointment_sheet.dart';
 import '../widgets/health/health_ui.dart';
 
-/// Sağlık sekmesi — şimdilik yalnızca aşı takibi.
+/// Sağlık sekmesi — aşı takibi ve veteriner randevuları.
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.onBackToHome});
 
@@ -18,9 +19,21 @@ class HealthScreen extends StatefulWidget {
 class _HealthScreenState extends State<HealthScreen>
     with AutomaticKeepAliveClientMixin {
   final List<VaccineRecord> _vaccines = [];
+  final List<VetAppointmentRecord> _vetAppointments = [];
 
   @override
   bool get wantKeepAlive => true;
+
+  Future<void> _openAddVetAppointment() async {
+    final record = await showModalBottomSheet<VetAppointmentRecord>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const AddVetAppointmentSheet(),
+    );
+    if (record == null || !mounted) return;
+    setState(() => _vetAppointments.insert(0, record));
+  }
 
   Future<void> _openAddVaccine() async {
     final record = await showModalBottomSheet<VaccineRecord>(
@@ -36,6 +49,12 @@ class _HealthScreenState extends State<HealthScreen>
   List<VaccineRecord> get _sortedVaccines {
     final copy = List<VaccineRecord>.from(_vaccines);
     copy.sort((a, b) => b.vaccinationDate.compareTo(a.vaccinationDate));
+    return copy;
+  }
+
+  List<VetAppointmentRecord> get _sortedVetAppointments {
+    final copy = List<VetAppointmentRecord>.from(_vetAppointments);
+    copy.sort((a, b) => b.visitDate.compareTo(a.visitDate));
     return copy;
   }
 
@@ -67,6 +86,36 @@ class _HealthScreenState extends State<HealthScreen>
       ),
     );
     if (yes == true && mounted) _removeVaccine(record.id);
+  }
+
+  void _removeVetAppointment(String id) {
+    setState(() => _vetAppointments.removeWhere((v) => v.id == id));
+  }
+
+  Future<void> _confirmDeleteVetAppointment(VetAppointmentRecord record) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kaydı sil'),
+        content: Text(
+          '${formatTurkishDate(record.visitDate)} randevusunu silmek istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Sil',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (yes == true && mounted) _removeVetAppointment(record.id);
   }
 
   @override
@@ -107,6 +156,40 @@ class _HealthScreenState extends State<HealthScreen>
                           record: _sortedVaccines[i],
                           onDelete: () =>
                               _confirmDeleteVaccine(_sortedVaccines[i]),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 16),
+          _HealthSectionCard(
+            title: 'VETERİNER RANDEVULARI',
+            onAdd: _openAddVetAppointment,
+            child: _sortedVetAppointments.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Henüz randevu kaydı yok. Sağ üstteki + ile ekleyin.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: HealthUi.muted.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < _sortedVetAppointments.length; i++) ...[
+                        if (i > 0)
+                          Divider(
+                            height: 1,
+                            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+                          ),
+                        _VetAppointmentListTile(
+                          record: _sortedVetAppointments[i],
+                          onDelete: () => _confirmDeleteVetAppointment(
+                            _sortedVetAppointments[i],
+                          ),
                         ),
                       ],
                     ],
@@ -262,6 +345,77 @@ class _VaccineListTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   formatTurkishDate(record.vaccinationDate),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: HealthUi.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onDelete,
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              size: 22,
+              color: HealthUi.muted.withValues(alpha: 0.85),
+            ),
+            tooltip: 'Sil',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VetAppointmentListTile extends StatelessWidget {
+  const _VetAppointmentListTile({
+    required this.record,
+    required this.onDelete,
+  });
+
+  final VetAppointmentRecord record;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: HealthUi.accentPink.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.medical_services_outlined,
+              color: HealthUi.accentPink,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  record.reason,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: HealthUi.titleInk,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  formatTurkishDate(record.visitDate),
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,

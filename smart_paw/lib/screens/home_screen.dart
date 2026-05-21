@@ -7,7 +7,6 @@ import '../services/auth_session.dart';
 import '../services/daily_routine_api_service.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
-import 'add_vet_visit_screen.dart';
 import 'health_screen.dart';
 import 'my_cats_screen.dart';
 import 'notifications_screen.dart';
@@ -177,12 +176,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _openAddVetVisit() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const AddVetVisitScreen()),
-    );
-  }
-
   void _openMyCats() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const MyCatsScreen()),
@@ -247,7 +240,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onQuickMyCats: _openMyCats,
                       onQuickAddCat: _openQuickAddCat,
                       onQuickNotifications: _openNotifications,
-                      onQuickAddVetVisit: _openAddVetVisit,
+                      onQuickAddVetVisit: () {
+                        setState(() => _navIndex = _healthTabIndex);
+                      },
                       onQuickVaccine: () {
                         setState(() => _navIndex = _healthTabIndex);
                       },
