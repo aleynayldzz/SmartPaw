@@ -24,15 +24,22 @@ class _HealthScreenState extends State<HealthScreen>
   @override
   bool get wantKeepAlive => true;
 
-  Future<void> _openAddVetAppointment() async {
+  Future<void> _openVetAppointmentSheet({VetAppointmentRecord? existing}) async {
     final record = await showModalBottomSheet<VetAppointmentRecord>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const AddVetAppointmentSheet(),
+      builder: (_) => AddVetAppointmentSheet(initial: existing),
     );
     if (record == null || !mounted) return;
-    setState(() => _vetAppointments.insert(0, record));
+    setState(() {
+      if (existing != null) {
+        final i = _vetAppointments.indexWhere((v) => v.id == existing.id);
+        if (i >= 0) _vetAppointments[i] = record;
+      } else {
+        _vetAppointments.insert(0, record);
+      }
+    });
   }
 
   Future<void> _openAddVaccine() async {
@@ -164,7 +171,7 @@ class _HealthScreenState extends State<HealthScreen>
           const SizedBox(height: 16),
           _HealthSectionCard(
             title: 'VETERİNER RANDEVULARI',
-            onAdd: _openAddVetAppointment,
+            onAdd: () => _openVetAppointmentSheet(),
             child: _sortedVetAppointments.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -187,6 +194,9 @@ class _HealthScreenState extends State<HealthScreen>
                           ),
                         _VetAppointmentListTile(
                           record: _sortedVetAppointments[i],
+                          onTap: () => _openVetAppointmentSheet(
+                            existing: _sortedVetAppointments[i],
+                          ),
                           onDelete: () => _confirmDeleteVetAppointment(
                             _sortedVetAppointments[i],
                           ),
@@ -374,10 +384,12 @@ class _VaccineListTile extends StatelessWidget {
 class _VetAppointmentListTile extends StatelessWidget {
   const _VetAppointmentListTile({
     required this.record,
+    required this.onTap,
     required this.onDelete,
   });
 
   final VetAppointmentRecord record;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
 
   @override
@@ -387,42 +399,53 @@ class _VetAppointmentListTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: HealthUi.accentPink.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.medical_services_outlined,
-              color: HealthUi.accentPink,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  record.reason,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: HealthUi.titleInk,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: HealthUi.accentPink.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.medical_services_outlined,
+                      color: HealthUi.accentPink,
+                      size: 22,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  formatTurkishDate(record.visitDate),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: HealthUi.muted,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.reason,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: HealthUi.titleInk,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          formatTurkishDate(record.visitDate),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: HealthUi.muted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           IconButton(

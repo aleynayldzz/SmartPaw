@@ -5,9 +5,14 @@ import '../../models/health_record.dart';
 import '../../utils/turkish_date_format.dart';
 import 'health_ui.dart';
 
-/// Yeni veteriner randevusu — alt sayfa formu.
+/// Veteriner randevusu ekleme / düzenleme — alt sayfa formu.
 class AddVetAppointmentSheet extends StatefulWidget {
-  const AddVetAppointmentSheet({super.key});
+  const AddVetAppointmentSheet({super.key, this.initial});
+
+  /// Dolu ise düzenleme modu.
+  final VetAppointmentRecord? initial;
+
+  bool get isEditing => initial != null;
 
   @override
   State<AddVetAppointmentSheet> createState() => _AddVetAppointmentSheetState();
@@ -19,6 +24,28 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
   DateTime? _visitDate;
   String? _selectedReason;
   DateTime? _nextVisitDate;
+
+  List<String> get _reasonOptions {
+    final reason = widget.initial?.reason;
+    if (reason != null &&
+        reason.isNotEmpty &&
+        !kVetVisitReasonOptions.contains(reason)) {
+      return [reason, ...kVetVisitReasonOptions];
+    }
+    return kVetVisitReasonOptions;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final ini = widget.initial;
+    if (ini != null) {
+      _visitDate = ini.visitDate;
+      _selectedReason = ini.reason;
+      _nextVisitDate = ini.nextVisitDate;
+      _notesCtrl.text = ini.doctorNotes;
+    }
+  }
 
   @override
   void dispose() {
@@ -66,6 +93,7 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
     Navigator.pop(
       context,
       VetAppointmentRecord(
+        id: widget.initial?.id,
         visitDate: _visitDate!,
         reason: reason,
         doctorNotes: _notesCtrl.text.trim(),
@@ -124,9 +152,11 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Yeni Veteriner Randevusu',
-                            style: TextStyle(
+                          Text(
+                            widget.isEditing
+                                ? 'Veteriner Randevusunu Düzenle'
+                                : 'Yeni Veteriner Randevusu',
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
                               color: HealthUi.titleInk,
@@ -134,7 +164,9 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Randevu ve ziyaret bilgilerinizi kaydedin.',
+                            widget.isEditing
+                                ? 'Randevu bilgilerini güncelleyin.'
+                                : 'Randevu ve ziyaret bilgilerinizi kaydedin.',
                             style: TextStyle(
                               fontSize: 13,
                               height: 1.35,
@@ -174,7 +206,7 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
                           Icons.keyboard_arrow_down_rounded,
                           color: HealthUi.muted.withValues(alpha: 0.8),
                         ),
-                        items: kVetVisitReasonOptions
+                        items: _reasonOptions
                             .map(
                               (r) => DropdownMenuItem(
                                 value: r,
