@@ -8,6 +8,7 @@ import '../services/daily_routine_api_service.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
 import 'add_vet_visit_screen.dart';
+import 'health_screen.dart';
 import 'my_cats_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
@@ -21,7 +22,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  static const int _healthTabIndex = 1;
   static const int _profileTabIndex = 4;
 
   int _navIndex = 0;
@@ -46,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -72,6 +75,19 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadDailyRoutine();
+    }
   }
 
   Future<void> _loadDailyRoutine() async {
@@ -185,7 +201,9 @@ class _HomeScreenState extends State<HomeScreen> {
     const titleColor = Color(0xFF3E3E3E);
 
     return Scaffold(
-      appBar: _navIndex == _profileTabIndex || _navIndex == 0
+      appBar: _navIndex == _profileTabIndex ||
+              _navIndex == 0 ||
+              _navIndex == _healthTabIndex
           ? null
           : AppBar(
               backgroundColor: Colors.transparent,
@@ -200,7 +218,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
       bottomNavigationBar: MainBottomNav(
         currentIndex: _navIndex,
-        onSelect: (i) => setState(() => _navIndex = i),
+        onSelect: (i) {
+          if (i == 0 && _navIndex != 0) {
+            _loadDailyRoutine();
+          }
+          setState(() => _navIndex = i);
+        },
       ),
       backgroundColor: _pageBackground,
       body: _navIndex == _profileTabIndex
@@ -209,53 +232,74 @@ class _HomeScreenState extends State<HomeScreen> {
               width: double.infinity,
               height: double.infinity,
               child: SafeArea(
-                child: _navIndex == 0
-                    ? _HomeGreetingScroll(
-                        greetingName: _profileGreetingName,
-                        completed: _routineCompleted,
-                        total: _routineTotal,
-                        routineLoading: _routineLoading,
-                        routineError: _routineError,
-                        onRetryRoutine: _loadDailyRoutine,
-                        tasks: _routineTasks,
-                        onToggleTask: _toggleRoutineTask,
-                        onQuickMyCats: _openMyCats,
-                        onQuickAddCat: _openQuickAddCat,
-                        onQuickNotifications: _openNotifications,
-                        onQuickAddVetVisit: _openAddVetVisit,
-                        onQuickVaccine: () =>
-                            _showComingSoon('Aşı ekleme'),
-                        onQuickMedication: () =>
-                            _showComingSoon('İlaç ekleme'),
-                      )
-                    : Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.asset(
-                                'assets/images/patilogo.png',
-                                height: 88,
-                                fit: BoxFit.contain,
-                              ),
-                              const SizedBox(height: 28),
-                              const Text(
-                                'Akıllı bakım özellikleri burada geliştirilecek.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF6B6B6B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                child: IndexedStack(
+                  index: _navIndex.clamp(0, 3),
+                  children: [
+                    _HomeGreetingScroll(
+                      greetingName: _profileGreetingName,
+                      completed: _routineCompleted,
+                      total: _routineTotal,
+                      routineLoading: _routineLoading,
+                      routineError: _routineError,
+                      onRetryRoutine: _loadDailyRoutine,
+                      tasks: _routineTasks,
+                      onToggleTask: _toggleRoutineTask,
+                      onQuickMyCats: _openMyCats,
+                      onQuickAddCat: _openQuickAddCat,
+                      onQuickNotifications: _openNotifications,
+                      onQuickAddVetVisit: _openAddVetVisit,
+                      onQuickVaccine: () {
+                        setState(() => _navIndex = _healthTabIndex);
+                      },
+                      onQuickMedication: () =>
+                          _showComingSoon('İlaç ekleme'),
+                    ),
+                    HealthScreen(
+                      onBackToHome: () {
+                        setState(() => _navIndex = 0);
+                        _loadDailyRoutine();
+                      },
+                    ),
+                    const _NavPlaceholderTab(),
+                    const _NavPlaceholderTab(),
+                  ],
+                ),
               ),
             ),
+    );
+  }
+}
+
+class _NavPlaceholderTab extends StatelessWidget {
+  const _NavPlaceholderTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/images/patilogo.png',
+              height: 88,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(height: 28),
+            const Text(
+              'Akıllı bakım özellikleri burada geliştirilecek.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF6B6B6B),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
