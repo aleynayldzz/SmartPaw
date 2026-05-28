@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../models/health_record.dart';
 import '../utils/turkish_date_format.dart';
+import '../widgets/health/add_medication_sheet.dart';
 import '../widgets/health/add_vaccine_sheet.dart';
 import '../widgets/health/add_vet_appointment_sheet.dart';
 import '../widgets/health/health_ui.dart';
 
-/// Sağlık sekmesi — aşı takibi ve veteriner randevuları.
+/// Sağlık sekmesi — aşı, veteriner randevuları ve ilaç takibi.
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key, required this.onBackToHome});
 
@@ -20,6 +21,7 @@ class _HealthScreenState extends State<HealthScreen>
     with AutomaticKeepAliveClientMixin {
   final List<VaccineRecord> _vaccines = [];
   final List<VetAppointmentRecord> _vetAppointments = [];
+  final List<MedicationRecord> _medications = [];
 
   @override
   bool get wantKeepAlive => true;
@@ -38,6 +40,24 @@ class _HealthScreenState extends State<HealthScreen>
         if (i >= 0) _vetAppointments[i] = record;
       } else {
         _vetAppointments.insert(0, record);
+      }
+    });
+  }
+
+  Future<void> _openMedicationSheet({MedicationRecord? existing}) async {
+    final record = await showModalBottomSheet<MedicationRecord>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddMedicationSheet(initial: existing),
+    );
+    if (record == null || !mounted) return;
+    setState(() {
+      if (existing != null) {
+        final i = _medications.indexWhere((m) => m.id == existing.id);
+        if (i >= 0) _medications[i] = record;
+      } else {
+        _medications.insert(0, record);
       }
     });
   }
@@ -62,6 +82,12 @@ class _HealthScreenState extends State<HealthScreen>
   List<VetAppointmentRecord> get _sortedVetAppointments {
     final copy = List<VetAppointmentRecord>.from(_vetAppointments);
     copy.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    return copy;
+  }
+
+  List<MedicationRecord> get _sortedMedications {
+    final copy = List<MedicationRecord>.from(_medications);
+    copy.sort((a, b) => b.startDate.compareTo(a.startDate));
     return copy;
   }
 
@@ -123,6 +149,36 @@ class _HealthScreenState extends State<HealthScreen>
       ),
     );
     if (yes == true && mounted) _removeVetAppointment(record.id);
+  }
+
+  void _removeMedication(String id) {
+    setState(() => _medications.removeWhere((m) => m.id == id));
+  }
+
+  Future<void> _confirmDeleteMedication(MedicationRecord record) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kaydı sil'),
+        content: Text(
+          '"${record.displayTitle}" kaydını silmek istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Sil',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (yes == true && mounted) _removeMedication(record.id);
   }
 
   @override
@@ -199,6 +255,43 @@ class _HealthScreenState extends State<HealthScreen>
                           ),
                           onDelete: () => _confirmDeleteVetAppointment(
                             _sortedVetAppointments[i],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 16),
+          _HealthSectionCard(
+            title: 'İLAÇ TAKİBİ',
+            onAdd: () => _openMedicationSheet(),
+            child: _sortedMedications.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Henüz ilaç kaydı yok. Sağ üstteki + ile ekleyin.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: HealthUi.muted.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < _sortedMedications.length; i++) ...[
+                        if (i > 0)
+                          Divider(
+                            height: 1,
+                            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+                          ),
+                        _MedicationListTile(
+                          record: _sortedMedications[i],
+                          onTap: () => _openMedicationSheet(
+                            existing: _sortedMedications[i],
+                          ),
+                          onDelete: () => _confirmDeleteMedication(
+                            _sortedMedications[i],
                           ),
                         ),
                       ],
@@ -443,6 +536,120 @@ class _VetAppointmentListTile extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onDelete,
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              size: 22,
+              color: HealthUi.muted.withValues(alpha: 0.85),
+            ),
+            tooltip: 'Sil',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MedicationListTile extends StatelessWidget {
+  const _MedicationListTile({
+    required this.record,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final MedicationRecord record;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = record.isActive;
+    final statusLabel = active ? 'Aktif' : 'Bitti';
+    final remainingLabel = record.stillUsing && record.daysRemaining > 0
+        ? 'Kalan: ${record.daysRemaining} Gün'
+        : 'Süresi doldu';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: HealthUi.accentPink.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.medication_outlined,
+                      color: HealthUi.accentPink,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.displayTitle,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: HealthUi.titleInk,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          record.frequency.labelTr,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: HealthUi.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        remainingLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: HealthUi.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        statusLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              active ? HealthUi.accentPink : HealthUi.muted,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

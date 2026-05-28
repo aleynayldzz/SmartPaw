@@ -246,8 +246,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onQuickVaccine: () {
                         setState(() => _navIndex = _healthTabIndex);
                       },
-                      onQuickMedication: () =>
-                          _showComingSoon('İlaç ekleme'),
+                      onQuickMedication: () {
+                        setState(() => _navIndex = _healthTabIndex);
+                      },
                     ),
                     HealthScreen(
                       onBackToHome: () {

@@ -23,6 +23,7 @@ class VetAppointmentRecord {
     String? id,
     required this.visitDate,
     required this.reason,
+    required this.weightKg,
     this.doctorNotes = '',
     this.nextVisitDate,
   }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
@@ -30,14 +31,30 @@ class VetAppointmentRecord {
   final String id;
   final DateTime visitDate;
   final String reason;
+  final double weightKg;
   final String doctorNotes;
   final DateTime? nextVisitDate;
 }
 
 enum MedicationFrequency { daily, weekly, asNeeded }
 
+extension MedicationFrequencyLabels on MedicationFrequency {
+  String get labelTr => switch (this) {
+        MedicationFrequency.daily => 'Günde 1 kez',
+        MedicationFrequency.weekly => 'Haftada 1 kez',
+        MedicationFrequency.asNeeded => 'Gerektiğinde',
+      };
+
+  String get segmentTr => switch (this) {
+        MedicationFrequency.daily => 'Günlük',
+        MedicationFrequency.weekly => 'Haftalık',
+        MedicationFrequency.asNeeded => 'Gerektiğinde',
+      };
+}
+
 class MedicationRecord {
   MedicationRecord({
+    String? id,
     required this.name,
     required this.dosage,
     required this.frequency,
@@ -45,8 +62,9 @@ class MedicationRecord {
     required this.endDate,
     this.stillUsing = true,
     this.notes = '',
-  });
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
 
+  final String id;
   final String name;
   final String dosage;
   final MedicationFrequency frequency;
@@ -63,4 +81,10 @@ class MedicationRecord {
   }
 
   bool get isActive => stillUsing && daysRemaining > 0;
+
+  String get displayTitle {
+    final d = dosage.trim();
+    if (d.isEmpty) return name;
+    return '$name $d';
+  }
 }
