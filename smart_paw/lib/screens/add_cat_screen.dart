@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/cat_breeds.dart';
 import '../models/cat_profile.dart';
 import '../services/cat_api_service.dart';
+import '../widgets/health/health_ui.dart';
 
 const _kCreamBg = Color(0xFFFFF9F1);
 const _kTitleColor = Color(0xFF3E3E3E);
@@ -504,31 +505,36 @@ class _AddCatScreenState extends State<AddCatScreen> {
   }
 
   Future<void> _pickWeight(BuildContext parentContext) async {
-    final mq = MediaQuery.sizeOf(parentContext);
-    await showModalBottomSheet<void>(
+    final initial = _weightKg.clamp(
+      _HorizontalWeightPicker.minKg,
+      _HorizontalWeightPicker.maxKg,
+    );
+    final picked = await showModalBottomSheet<double>(
       context: parentContext,
-      backgroundColor: _kCreamBg,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.paddingOf(ctx).bottom + 16,
-          ),
-          child: _HorizontalWeightPicker(
-            width: mq.width,
-            initialKg: _weightKg,
-            onConfirm: (kg) {
-              setState(() => _weightKg = kg);
-              Navigator.pop(ctx);
-            },
-            onCancel: () => Navigator.pop(ctx),
+        return SafeArea(
+          top: false,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Material(
+              color: HealthUi.cardBg,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: _HorizontalWeightPicker(initialKg: initial),
+              ),
+            ),
           ),
         );
       },
     );
+    if (picked == null || !mounted) return;
+    setState(() => _weightKg = picked);
   }
 
   String? _nameError(String raw) {
@@ -732,13 +738,36 @@ class _AddCatScreenState extends State<AddCatScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _LabeledField(
-                            label: 'Ağırlık',
-                            child: _SelectRow(
-                              text:
-                                  '${_weightKg.toStringAsFixed(1)} kg',
-                              trailing: Icons.tune_rounded,
-                              dense: true,
+                            label: 'Kilo',
+                            child: InkWell(
                               onTap: () => _pickWeight(context),
+                              borderRadius: BorderRadius.circular(12),
+                              child: InputDecorator(
+                                decoration: _weightFieldDecoration(
+                                  hint: 'Kilo seçin',
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${_weightKg.toStringAsFixed(1)} kg',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: _kTitleColor,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.swap_horiz_rounded,
+                                      size: 22,
+                                      color: HealthUi.muted.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -1081,235 +1110,263 @@ class _DottedRectPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _HorizontalWeightPicker extends StatefulWidget {
-  const _HorizontalWeightPicker({
-    required this.width,
-    required this.initialKg,
-    required this.onConfirm,
-    required this.onCancel,
-  });
-
-  final double width;
-  final double initialKg;
-  final ValueChanged<double> onConfirm;
-  final VoidCallback onCancel;
-
-  @override
-  State<_HorizontalWeightPicker> createState() =>
-      _HorizontalWeightPickerState();
+InputDecoration _weightFieldDecoration({required String hint}) {
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: TextStyle(color: HealthUi.muted.withValues(alpha: 0.7)),
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: HealthUi.fieldBorder),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: HealthUi.fieldBorder),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: HealthUi.accentPink, width: 1.5),
+    ),
+  );
 }
 
-class _HorizontalWeightPickerState extends State<_HorizontalWeightPicker> {
+class _HorizontalWeightPicker extends StatefulWidget {
+  const _HorizontalWeightPicker({required this.initialKg});
+
+  final double initialKg;
+
   static const double minKg = 0.5;
   static const double maxKg = 25.0;
   static const double step = 0.1;
-  /// Daha geniş tik = parmakla kaydırma daha kolay.
-  static const double tickWidth = 16;
+
+  @override
+  State<_HorizontalWeightPicker> createState() => _HorizontalWeightPickerState();
+}
+
+class _HorizontalWeightPickerState extends State<_HorizontalWeightPicker> {
+  static const double _tickWidth = 14.0;
 
   late final ScrollController _controller;
-  late int _tickCount;
+  late final int _tickCount;
   late double _displayKg;
+  bool _snapping = false;
 
   @override
   void initState() {
     super.initState();
-    _tickCount = ((maxKg - minKg) / step).round() + 1;
-    final idx = _indexForKg(widget.initialKg);
-    _displayKg = _kgForIndex(idx);
-    final initialOffset = idx * tickWidth;
-    _controller = ScrollController(initialScrollOffset: initialOffset);
+    _tickCount =
+        ((_HorizontalWeightPicker.maxKg - _HorizontalWeightPicker.minKg) /
+                    _HorizontalWeightPicker.step)
+                .round() +
+            1;
+    _displayKg = _kgForIndex(_indexForKg(widget.initialKg));
+    _controller = ScrollController(initialScrollOffset: _offsetForKg(_displayKg));
     _controller.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_controller.hasClients) return;
-      final maxEx = _controller.position.maxScrollExtent;
-      final raw = _indexForKg(_displayKg) * tickWidth;
-      _controller.jumpTo(raw.clamp(0.0, maxEx));
-    });
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onScroll);
-    _controller.dispose();
+    _controller
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    final idx =
+        (_controller.offset / _tickWidth).round().clamp(0, _tickCount - 1);
+    final kg = _kgForIndex(idx);
+    if (kg != _displayKg) setState(() => _displayKg = kg);
+  }
+
   int _indexForKg(double kg) {
-    final raw = ((kg - minKg) / step).round();
+    final raw =
+        ((kg - _HorizontalWeightPicker.minKg) / _HorizontalWeightPicker.step)
+            .round();
     return raw.clamp(0, _tickCount - 1);
   }
 
   double _kgForIndex(int i) {
-    final v = minKg + i * step;
+    final v =
+        _HorizontalWeightPicker.minKg + i * _HorizontalWeightPicker.step;
     return double.parse(v.toStringAsFixed(1));
   }
 
-  void _onScroll() {
-    final i = _indexFromOffset(_controller.offset);
-    final kg = _kgForIndex(i);
-    if (kg != _displayKg) {
-      setState(() => _displayKg = kg);
-    }
-  }
-
-  int _indexFromOffset(double offset) {
-    final i = (offset / tickWidth).round();
-    return i.clamp(0, _tickCount - 1);
-  }
-
-  void _snap() {
-    if (!_controller.hasClients) return;
-    final i = _indexFromOffset(_controller.offset);
-    final target = i * tickWidth;
-    final maxExtent = _controller.position.maxScrollExtent;
-    _controller.animateTo(
-      target.clamp(0.0, maxExtent),
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-    );
-  }
+  double _offsetForKg(double kg) => _indexForKg(kg) * _tickWidth;
 
   @override
   Widget build(BuildContext context) {
-    final pad = (widget.width - tickWidth) / 2;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 10),
-        const Text(
-          'Ağırlık (kg)',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            color: _kTitleColor,
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '0,5 – 25 kg arası kaydırın',
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 13,
+          const SizedBox(height: 14),
+          const Text(
+            'Kilo',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: HealthUi.titleInk,
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        Text(
-          _displayKg.toStringAsFixed(1),
-          style: const TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.w800,
-            color: _kTitleColor,
+          const SizedBox(height: 6),
+          Text(
+            'Kaydırarak seçin (${_HorizontalWeightPicker.minKg.toStringAsFixed(1)}–${_HorizontalWeightPicker.maxKg.toStringAsFixed(0)} kg)',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: HealthUi.muted.withValues(alpha: 0.9),
+            ),
           ),
-        ),
-        const Text(
-          'kg',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: _kTitleColor,
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _displayKg.toStringAsFixed(1),
+                style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  color: HealthUi.titleInk,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'kg',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: HealthUi.muted.withValues(alpha: 0.9),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 96,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (n) {
-              if (n is ScrollEndNotification) {
-                _snap();
-              }
-              return false;
-            },
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 86,
             child: Stack(
-              clipBehavior: Clip.hardEdge,
+              alignment: Alignment.center,
               children: [
-                ListView.builder(
-                  controller: _controller,
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.symmetric(horizontal: pad),
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  itemCount: _tickCount,
-                  itemBuilder: (context, i) {
-                    final kg = _kgForIndex(i);
-                    final isWhole = (kg * 10).round() % 10 == 0;
-                    return SizedBox(
-                      width: tickWidth,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text(
-                            isWhole ? kg.toStringAsFixed(0) : '',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey.shade500,
-                              fontWeight: FontWeight.w600,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = constraints.maxWidth;
+                    final sidePad = (w / 2 - _tickWidth / 2).clamp(0.0, 9999.0);
+
+                    return NotificationListener<ScrollNotification>(
+                      onNotification: (n) {
+                        if (_snapping) return false;
+                        if (n is ScrollEndNotification) {
+                          final idx = (_controller.offset / _tickWidth)
+                              .round()
+                              .clamp(0, _tickCount - 1);
+                          final target = idx * _tickWidth;
+                          _snapping = true;
+                          _controller
+                              .animateTo(
+                                target,
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOutCubic,
+                              )
+                              .whenComplete(() => _snapping = false);
+                        }
+                        return false;
+                      },
+                      child: ListView.builder(
+                        controller: _controller,
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        padding: EdgeInsets.symmetric(horizontal: sidePad),
+                        itemCount: _tickCount,
+                        itemBuilder: (_, i) {
+                          final kg = _kgForIndex(i);
+                          final isWhole = (kg * 10).round() % 10 == 0;
+                          return SizedBox(
+                            width: _tickWidth,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 2,
+                                  height: isWhole ? 26 : 16,
+                                  decoration: BoxDecoration(
+                                    color: isWhole
+                                        ? HealthUi.accentPink
+                                        : HealthUi.fieldBorder.withValues(
+                                            alpha: 0.9,
+                                          ),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  isWhole ? kg.toStringAsFixed(0) : '',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: HealthUi.muted.withValues(alpha: 0.9),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Container(
-                            width: 1.5,
-                            height: isWhole ? 20 : 11,
-                            color: isWhole
-                                ? _kTitleColor
-                                : Colors.grey.shade400,
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     );
                   },
                 ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        width: 2,
-                        height: 58,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE85D5D),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 2,
+                    decoration: BoxDecoration(
+                      color: HealthUi.accentPink,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: widget.onCancel,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, _displayKg),
+              style: FilledButton.styleFrom(
+                backgroundColor: HealthUi.accentPink,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Text('Vazgeç'),
+              ),
+              child: const Text(
+                'Seç',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => widget.onConfirm(_displayKg),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kAccentPink,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: const Text('Tamam'),
-              ),
-            ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }

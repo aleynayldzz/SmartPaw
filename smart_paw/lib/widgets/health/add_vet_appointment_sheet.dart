@@ -271,7 +271,7 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
                 ),
                 const SizedBox(height: 16),
                 _LabeledField(
-                  label: 'Kilo (kg)',
+                  label: 'Kilo',
                   child: InkWell(
                     onTap: () => _pickWeight(context),
                     borderRadius: BorderRadius.circular(12),
@@ -526,7 +526,7 @@ class _HorizontalWeightPickerState extends State<_HorizontalWeightPicker> {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Kilo (kg)',
+            'Kilo',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 16,
