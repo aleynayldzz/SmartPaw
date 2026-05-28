@@ -1,4 +1,4 @@
-/// Sağlık sekmesi için yerel kayıt modelleri (frontend; API sonra bağlanabilir).
+// Sağlık sekmesi için yerel kayıt modelleri (frontend; API sonra bağlanabilir).
 
 class VaccineRecord {
   VaccineRecord({

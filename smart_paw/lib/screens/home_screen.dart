@@ -182,13 +182,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showComingSoon(String label) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label çok yakında.')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     const titleColor = Color(0xFF3E3E3E);
