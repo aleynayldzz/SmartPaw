@@ -4,7 +4,7 @@ import '../services/auth_session.dart';
 import 'login_screen.dart';
 import 'my_cats_screen.dart';
 
-/// Profil görünümü; tüm kullanıcılar için `assets/images/userlogo.png` kullanılır.
+/// Profil görünümü; avatar olarak `assets/images/patilogo.png` kullanılır.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
@@ -15,7 +15,7 @@ class ProfileScreen extends StatelessWidget {
   static const double _headerHeight = 132;
   static const double _avatarSize = 96;
 
-  static const String _avatarAsset = 'assets/images/userlogo.png';
+  static const String _avatarAsset = 'assets/images/patilogo.png';
 
   String get _displayName {
     final n = AuthSession.user?['name']?.toString().trim();
@@ -144,17 +144,21 @@ class ProfileScreen extends StatelessWidget {
                   ],
                 ),
                 child: ClipOval(
-                  child: Image.asset(
-                    _avatarAsset,
-                    fit: BoxFit.cover,
-                    // Büyük PNG’yi tam çözünürlükte decode etmeyi engeller (bellek / ilk kare).
-                    cacheWidth: (MediaQuery.devicePixelRatioOf(context) * _avatarSize)
-                        .round(),
-                    cacheHeight: (MediaQuery.devicePixelRatioOf(context) * _avatarSize)
-                        .round(),
-                    errorBuilder: (_, _, _) => ColoredBox(
-                      color: _headerPink.withValues(alpha: 0.5),
-                      child: const Icon(Icons.person, size: 48),
+                  child: ColoredBox(
+                    color: _creamBg,
+                    child: Image.asset(
+                      _avatarAsset,
+                      fit: BoxFit.contain,
+                      cacheWidth:
+                          (MediaQuery.devicePixelRatioOf(context) * _avatarSize)
+                              .round(),
+                      cacheHeight:
+                          (MediaQuery.devicePixelRatioOf(context) * _avatarSize)
+                              .round(),
+                      errorBuilder: (_, _, _) => ColoredBox(
+                        color: _headerPink.withValues(alpha: 0.5),
+                        child: const Icon(Icons.pets_outlined, size: 48),
+                      ),
                     ),
                   ),
                 ),

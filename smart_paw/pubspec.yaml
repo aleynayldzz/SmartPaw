@@ -67,8 +67,6 @@ flutter:
     - assets/images/
     # Alt klasörü açıkça ver; böylece `breeds/*` kesin olarak bundle’a girer (web dahil).
     - assets/images/breeds/
-    # Profil avatarı (dosya eklendikten sonra manifest’e kesin girmesi için açıkça)
-    - assets/images/userlogo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
