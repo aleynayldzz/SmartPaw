@@ -1,21 +1,69 @@
-// Sağlık sekmesi için yerel kayıt modelleri (frontend; API sonra bağlanabilir).
+// Sağlık sekmesi kayıt modelleri.
 
 class VaccineRecord {
   VaccineRecord({
-    String? id,
+    this.id,
+    required this.catId,
     required this.name,
     required this.vaccinationDate,
     this.nextVaccinationDate,
+    this.catName,
     this.reminderEnabled = false,
     this.notes = '',
-  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+  });
 
-  final String id;
+  final int? id;
+  final int catId;
+  final String? catName;
   final String name;
   final DateTime vaccinationDate;
   final DateTime? nextVaccinationDate;
   final bool reminderEnabled;
   final String notes;
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.parse(s.length <= 10 ? '${s}T12:00:00.000' : s);
+  }
+
+  static int? _parseId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value == true) return true;
+    if (value == false || value == null) return false;
+    if (value is num) return value != 0;
+    final s = value.toString().trim().toLowerCase();
+    return s == 'true' || s == '1';
+  }
+
+  factory VaccineRecord.fromJson(Map<String, dynamic> json) {
+    return VaccineRecord(
+      id: _parseId(json['vaccination_id']),
+      catId: _parseId(json['cat_id']) ?? 0,
+      catName: json['cat_name']?.toString(),
+      name: json['vaccine_name']?.toString() ?? '',
+      vaccinationDate: _parseDate(json['vaccination_date'])!,
+      nextVaccinationDate: _parseDate(json['next_due_date']),
+      reminderEnabled: _parseBool(json['reminder_enabled']),
+      notes: json['notes']?.toString() ?? '',
+    );
+  }
+
+  bool get isUpcoming {
+    final next = nextVaccinationDate;
+    if (next == null) return false;
+    final today = DateTime.now();
+    final end = DateTime(today.year, today.month, today.day);
+    final due = DateTime(next.year, next.month, next.day);
+    return !due.isBefore(end);
+  }
 }
 
 class VetAppointmentRecord {

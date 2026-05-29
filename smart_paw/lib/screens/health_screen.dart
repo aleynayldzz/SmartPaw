@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/health_record.dart';
+import '../services/cat_api_service.dart';
+import '../services/vaccination_api_service.dart';
 import '../utils/turkish_date_format.dart';
 import '../widgets/health/add_medication_sheet.dart';
 import '../widgets/health/add_vaccine_sheet.dart';
@@ -19,12 +21,67 @@ class HealthScreen extends StatefulWidget {
 
 class _HealthScreenState extends State<HealthScreen>
     with AutomaticKeepAliveClientMixin {
-  final List<VaccineRecord> _vaccines = [];
+  List<VaccineRecord> _vaccines = [];
+  List<VaccineCatOption> _catOptions = [];
+  bool _vaccinesLoading = true;
+  String? _vaccinesError;
   final List<VetAppointmentRecord> _vetAppointments = [];
   final List<MedicationRecord> _medications = [];
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVaccines();
+  }
+
+  Future<void> _loadVaccines() async {
+    if (mounted) {
+      setState(() {
+        _vaccinesLoading = true;
+        _vaccinesError = null;
+      });
+    }
+    try {
+      final cats = await CatApiService.fetchMyCats();
+      final vaccines = await VaccinationApiService.fetchAll();
+      if (!mounted) return;
+      setState(() {
+        _catOptions = cats
+            .map(
+              (c) => VaccineCatOption(
+                catId: (c['cat_id'] as num).toInt(),
+                name: c['name']?.toString() ?? 'Kedi',
+              ),
+            )
+            .toList(growable: false);
+        _vaccines = vaccines;
+        _vaccinesLoading = false;
+        _vaccinesError = null;
+      });
+    } on VaccinationApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _vaccinesError = e.message;
+        _vaccinesLoading = false;
+      });
+    } on CatApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _vaccinesError = e.message;
+        _vaccinesLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _vaccinesError =
+            'Aşı kayıtları yüklenemedi. Sunucunun çalıştığından emin olun.';
+        _vaccinesLoading = false;
+      });
+    }
+  }
 
   Future<void> _openVetAppointmentSheet({VetAppointmentRecord? existing}) async {
     final record = await showModalBottomSheet<VetAppointmentRecord>(
@@ -63,19 +120,97 @@ class _HealthScreenState extends State<HealthScreen>
   }
 
   Future<void> _openAddVaccine() async {
-    final record = await showModalBottomSheet<VaccineRecord>(
+    await _openVaccineSheet(mode: VaccineSheetMode.create);
+  }
+
+  Future<void> _openVaccineSheet({
+    required VaccineSheetMode mode,
+    VaccineRecord? existing,
+  }) async {
+    if (_catOptions.isEmpty && !_vaccinesLoading) {
+      await _loadVaccines();
+    }
+    if (!mounted) return;
+
+    if (_catOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Aşı kaydı eklemek için önce bir kedi ekleyin.'),
+        ),
+      );
+      return;
+    }
+
+    final draft = await showModalBottomSheet<VaccineRecord>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const AddVaccineSheet(),
+      builder: (_) => AddVaccineSheet(
+        cats: _catOptions,
+        initial: existing,
+        mode: mode,
+      ),
     );
-    if (record == null || !mounted) return;
-    setState(() => _vaccines.insert(0, record));
+    if (draft == null || !mounted) return;
+    if (mode == VaccineSheetMode.view) return;
+
+    final updateId = draft.id ?? existing?.id;
+    final isUpdate = mode == VaccineSheetMode.edit && updateId != null;
+
+    try {
+      if (isUpdate) {
+        await VaccinationApiService.update(
+          vaccinationId: updateId,
+          catId: draft.catId,
+          vaccineName: draft.name,
+          vaccinationDate: draft.vaccinationDate,
+          nextDueDate: draft.nextVaccinationDate,
+          reminderEnabled: draft.reminderEnabled,
+          notes: draft.notes,
+        );
+      } else {
+        await VaccinationApiService.create(
+          catId: draft.catId,
+          vaccineName: draft.name,
+          vaccinationDate: draft.vaccinationDate,
+          nextDueDate: draft.nextVaccinationDate,
+          reminderEnabled: draft.reminderEnabled,
+          notes: draft.notes,
+        );
+      }
+      if (!mounted) return;
+      await _loadVaccines();
+    } on VaccinationApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isUpdate
+                ? 'Aşı kaydı güncellenemedi.'
+                : 'Aşı kaydı kaydedilemedi.',
+          ),
+        ),
+      );
+    }
   }
 
   List<VaccineRecord> get _sortedVaccines {
     final copy = List<VaccineRecord>.from(_vaccines);
     copy.sort((a, b) => b.vaccinationDate.compareTo(a.vaccinationDate));
+    return copy;
+  }
+
+  List<VaccineRecord> get _upcomingVaccines {
+    final copy = _vaccines.where((v) => v.isUpcoming).toList();
+    copy.sort(
+      (a, b) =>
+          a.nextVaccinationDate!.compareTo(b.nextVaccinationDate!),
+    );
     return copy;
   }
 
@@ -89,10 +224,6 @@ class _HealthScreenState extends State<HealthScreen>
     final copy = List<MedicationRecord>.from(_medications);
     copy.sort((a, b) => b.startDate.compareTo(a.startDate));
     return copy;
-  }
-
-  void _removeVaccine(String id) {
-    setState(() => _vaccines.removeWhere((v) => v.id == id));
   }
 
   Future<void> _confirmDeleteVaccine(VaccineRecord record) async {
@@ -118,7 +249,30 @@ class _HealthScreenState extends State<HealthScreen>
         ],
       ),
     );
-    if (yes == true && mounted) _removeVaccine(record.id);
+    if (yes != true || !mounted) return;
+    final id = record.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kayıt kimliği bulunamadı. Sayfayı yenileyin.')),
+      );
+      return;
+    }
+
+    try {
+      await VaccinationApiService.delete(id);
+      if (!mounted) return;
+      await _loadVaccines();
+    } on VaccinationApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aşı kaydı silinemedi.')),
+      );
+    }
   }
 
   void _removeVetAppointment(String id) {
@@ -181,6 +335,106 @@ class _HealthScreenState extends State<HealthScreen>
     if (yes == true && mounted) _removeMedication(record.id);
   }
 
+  Widget _buildVaccineSection() {
+    if (_vaccinesLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_vaccinesError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _vaccinesError!,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.35,
+              color: HealthUi.muted.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _loadVaccines,
+            child: const Text('Yeniden dene'),
+          ),
+        ],
+      );
+    }
+
+    if (_sortedVaccines.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          'Henüz aşı kaydı yok. Sağ üstteki + ile ekleyin.',
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.35,
+            color: HealthUi.muted.withValues(alpha: 0.9),
+          ),
+        ),
+      );
+    }
+
+    final upcoming = _upcomingVaccines;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (upcoming.isNotEmpty) ...[
+          const Text(
+            'YAKLAŞAN AŞILAR',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: HealthUi.accentPink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final record in upcoming)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _UpcomingVaccineChip(record: record),
+            ),
+          const SizedBox(height: 12),
+          Divider(
+            height: 1,
+            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+        ],
+        for (final (i, record) in _sortedVaccines.indexed) ...[
+          if (i > 0)
+            Divider(
+              height: 1,
+              color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+            ),
+          _VaccineListTile(
+            record: record,
+            onTap: () => _openVaccineSheet(
+              mode: VaccineSheetMode.view,
+              existing: record,
+            ),
+            onEdit: () => _openVaccineSheet(
+              mode: VaccineSheetMode.edit,
+              existing: record,
+            ),
+            onDelete: () => _confirmDeleteVaccine(record),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -194,35 +448,8 @@ class _HealthScreenState extends State<HealthScreen>
           const SizedBox(height: 8),
           _HealthSectionCard(
             title: 'AŞI TAKİBİ',
-            onAdd: _openAddVaccine,
-            child: _sortedVaccines.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Henüz aşı kaydı yok. Sağ üstteki + ile ekleyin.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.35,
-                        color: HealthUi.muted.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  )
-                : Column(
-                    children: [
-                      for (var i = 0; i < _sortedVaccines.length; i++) ...[
-                        if (i > 0)
-                          Divider(
-                            height: 1,
-                            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
-                          ),
-                        _VaccineListTile(
-                          record: _sortedVaccines[i],
-                          onDelete: () =>
-                              _confirmDeleteVaccine(_sortedVaccines[i]),
-                        ),
-                      ],
-                    ],
-                  ),
+            onAdd: _vaccinesLoading ? () {} : _openAddVaccine,
+            child: _buildVaccineSection(),
           ),
           const SizedBox(height: 16),
           _HealthSectionCard(
@@ -242,20 +469,16 @@ class _HealthScreenState extends State<HealthScreen>
                   )
                 : Column(
                     children: [
-                      for (var i = 0; i < _sortedVetAppointments.length; i++) ...[
+                      for (final (i, record) in _sortedVetAppointments.indexed) ...[
                         if (i > 0)
                           Divider(
                             height: 1,
                             color: HealthUi.fieldBorder.withValues(alpha: 0.6),
                           ),
                         _VetAppointmentListTile(
-                          record: _sortedVetAppointments[i],
-                          onTap: () => _openVetAppointmentSheet(
-                            existing: _sortedVetAppointments[i],
-                          ),
-                          onDelete: () => _confirmDeleteVetAppointment(
-                            _sortedVetAppointments[i],
-                          ),
+                          record: record,
+                          onTap: () => _openVetAppointmentSheet(existing: record),
+                          onDelete: () => _confirmDeleteVetAppointment(record),
                         ),
                       ],
                     ],
@@ -279,20 +502,16 @@ class _HealthScreenState extends State<HealthScreen>
                   )
                 : Column(
                     children: [
-                      for (var i = 0; i < _sortedMedications.length; i++) ...[
+                      for (final (i, record) in _sortedMedications.indexed) ...[
                         if (i > 0)
                           Divider(
                             height: 1,
                             color: HealthUi.fieldBorder.withValues(alpha: 0.6),
                           ),
                         _MedicationListTile(
-                          record: _sortedMedications[i],
-                          onTap: () => _openMedicationSheet(
-                            existing: _sortedMedications[i],
-                          ),
-                          onDelete: () => _confirmDeleteMedication(
-                            _sortedMedications[i],
-                          ),
+                          record: record,
+                          onTap: () => _openMedicationSheet(existing: record),
+                          onDelete: () => _confirmDeleteMedication(record),
                         ),
                       ],
                     ],
@@ -403,59 +622,154 @@ class _HealthSectionCard extends StatelessWidget {
   }
 }
 
+class _UpcomingVaccineChip extends StatelessWidget {
+  const _UpcomingVaccineChip({required this.record});
+
+  final VaccineRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = record.nextVaccinationDate!;
+    final catLabel = (record.catName?.isNotEmpty ?? false)
+        ? ' · ${record.catName}'
+        : '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: HealthUi.accentPink.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: HealthUi.accentPink.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_outlined,
+            size: 18,
+            color: HealthUi.accentPink,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${record.name}$catLabel — ${formatTurkishDate(next)}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: HealthUi.titleInk,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _VaccineListTile extends StatelessWidget {
   const _VaccineListTile({
     required this.record,
+    required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final VaccineRecord record;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  String get _catNameLabel {
+    final n = record.catName?.trim();
+    return (n != null && n.isNotEmpty) ? n : 'Kedi';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final subtitleParts = <String>[
+      _catNameLabel,
+      formatTurkishDate(record.vaccinationDate),
+      if (record.nextVaccinationDate != null)
+        'Sonraki: ${formatTurkishDate(record.nextVaccinationDate!)}',
+    ];
+    final notePreview = vaccineNotesPreview(record.notes);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: HealthUi.accentPink.withValues(alpha: 0.15),
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
               borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.vaccines_outlined,
-              color: HealthUi.accentPink,
-              size: 22,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: HealthUi.accentPink.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.vaccines_outlined,
+                      color: HealthUi.accentPink,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: HealthUi.titleInk,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitleParts.join(' · '),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: HealthUi.muted,
+                          ),
+                        ),
+                        if (notePreview.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            notePreview,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: HealthUi.muted.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  record.name,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: HealthUi.titleInk,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  formatTurkishDate(record.vaccinationDate),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: HealthUi.muted,
-                  ),
-                ),
-              ],
+          IconButton(
+            onPressed: onEdit,
+            icon: Icon(
+              Icons.more_vert,
+              size: 22,
+              color: HealthUi.muted.withValues(alpha: 0.85),
             ),
+            tooltip: 'Düzenle',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
           IconButton(
             onPressed: onDelete,

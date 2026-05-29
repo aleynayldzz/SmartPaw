@@ -7,6 +7,7 @@ const systemRoutes = require("./routes/system.routes");
 const authRoutes = require("./routes/auth.routes");
 const catRoutes = require("./routes/cat.routes");
 const dailyRoutineRoutes = require("./routes/daily-routine.routes");
+const vaccinationRoutes = require("./routes/vaccination.routes");
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/cats", catRoutes);
 app.use("/api/daily-routine", dailyRoutineRoutes);
+app.use("/api/vaccinations", vaccinationRoutes);
 
 const basePort = Number(process.env.PORT) || 3001;
 

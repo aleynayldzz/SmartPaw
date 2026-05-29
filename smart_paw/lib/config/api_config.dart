@@ -30,4 +30,9 @@ class ApiConfig {
   static Uri catsUri() => Uri.parse('$baseUrl/api/cats');
 
   static Uri catUri(int catId) => Uri.parse('$baseUrl/api/cats/$catId');
+
+  static Uri vaccinationsUri() => Uri.parse('$baseUrl/api/vaccinations');
+
+  static Uri vaccinationUri(int vaccinationId) =>
+      Uri.parse('$baseUrl/api/vaccinations/$vaccinationId');
 }
