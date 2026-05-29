@@ -16,11 +16,14 @@ class HealthScreen extends StatefulWidget {
   final VoidCallback onBackToHome;
 
   @override
-  State<HealthScreen> createState() => _HealthScreenState();
+  State<HealthScreen> createState() => HealthScreenState();
 }
 
-class _HealthScreenState extends State<HealthScreen>
+class HealthScreenState extends State<HealthScreen>
     with AutomaticKeepAliveClientMixin {
+  /// Ana sayfa kısayolundan aşı ekleme formunu açar.
+  Future<void> openAddVaccine() => _openAddVaccine();
+
   List<VaccineRecord> _vaccines = [];
   List<VaccineCatOption> _catOptions = [];
   bool _vaccinesLoading = true;
@@ -693,7 +696,7 @@ class _VaccineListTile extends StatelessWidget {
       if (record.nextVaccinationDate != null)
         'Sonraki: ${formatTurkishDate(record.nextVaccinationDate!)}',
     ];
-    final notePreview = vaccineNotesPreview(record.notes);
+    final notes = record.notes.trim();
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -742,10 +745,12 @@ class _VaccineListTile extends StatelessWidget {
                             color: HealthUi.muted,
                           ),
                         ),
-                        if (notePreview.isNotEmpty) ...[
+                        if (notes.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            notePreview,
+                            notes,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,

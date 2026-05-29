@@ -25,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const int _healthTabIndex = 1;
   static const int _profileTabIndex = 4;
 
+  final _healthKey = GlobalKey<HealthScreenState>();
+
   int _navIndex = 0;
 
   // Günlük bakım maddeleri artık API'den gelir (GET/PUT /api/daily-routine).
@@ -170,6 +172,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ).push<void>(MaterialPageRoute<void>(builder: (_) => const AddCatScreen()));
   }
 
+  void _openQuickAddVaccine() {
+    setState(() => _navIndex = _healthTabIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _healthKey.currentState?.openAddVaccine();
+    });
+  }
+
   void _openNotifications() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
@@ -236,14 +245,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onQuickAddVetVisit: () {
                         setState(() => _navIndex = _healthTabIndex);
                       },
-                      onQuickVaccine: () {
-                        setState(() => _navIndex = _healthTabIndex);
-                      },
+                      onQuickVaccine: _openQuickAddVaccine,
                       onQuickMedication: () {
                         setState(() => _navIndex = _healthTabIndex);
                       },
                     ),
                     HealthScreen(
+                      key: _healthKey,
                       onBackToHome: () {
                         setState(() => _navIndex = 0);
                         _loadDailyRoutine();

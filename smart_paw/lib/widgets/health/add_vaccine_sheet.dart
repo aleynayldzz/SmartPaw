@@ -679,11 +679,3 @@ class _DateField extends StatelessWidget {
     );
   }
 }
-
-/// Liste satırında kısa not önizlemesi.
-String vaccineNotesPreview(String notes, {int maxLen = 36}) {
-  final t = notes.trim();
-  if (t.isEmpty) return '';
-  if (t.length <= maxLen) return t;
-  return '${t.substring(0, maxLen).trim()}...';
-}
