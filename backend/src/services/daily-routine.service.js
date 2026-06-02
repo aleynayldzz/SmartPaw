@@ -11,11 +11,6 @@ const ROUTINE_TASKS = [
   { key: "refresh_food_and_water", title: "Mama ve Suyu Tazele" },
   { key: "brush_fur", title: "Tüylerini Tara" },
   { key: "clean_ears_nose_eyes", title: "Kulak, Burun ve Göz Temizliği" },
-  {
-    key: "give_medication",
-    title: "İlacını Ver",
-    requiresActiveMedication: true
-  },
   { key: "clean_litter_box", title: "Kum Kabını Temizle" },
   { key: "play_time", title: "Oyun Zamanı" }
 ];
@@ -41,31 +36,8 @@ function parseRoutineDate(value) {
   return { valid: true, value: s };
 }
 
-/** Kullanıcının herhangi bir kedisinde o gün için geçerli aktif ilaç + program var mı. */
-async function userHasActiveMedication(userId, dateStr) {
-  const res = await pool.query(
-    `
-    SELECT EXISTS (
-      SELECT 1
-      FROM medications m
-      INNER JOIN cats c ON c.cat_id = m.cat_id
-      INNER JOIN medication_schedules ms ON ms.medication_id = m.medication_id
-      WHERE c.user_id = $1
-        AND m.is_active = true
-        AND ms.is_active = true
-        AND (m.start_date IS NULL OR m.start_date <= $2::date)
-        AND (m.end_date IS NULL OR m.end_date >= $2::date)
-    ) AS has_med
-    `,
-    [userId, dateStr]
-  );
-  return Boolean(res.rows[0]?.has_med);
-}
-
-function applicableTasks(hasMedication) {
-  return ROUTINE_TASKS.filter(
-    (t) => !t.requiresActiveMedication || hasMedication
-  );
+function applicableTasks() {
+  return ROUTINE_TASKS;
 }
 
 function routinePayload(dateStr, applicable, rows) {
@@ -86,7 +58,6 @@ function routinePayload(dateStr, applicable, rows) {
 
   return {
     date: dateStr,
-    hasActiveMedication: applicable.some((t) => t.key === "give_medication"),
     totalApplicable: tasks.length,
     completedCount,
     tasks
@@ -114,8 +85,7 @@ async function getRoutine(userId, dateInput) {
     return { statusCode: 400, json: { ok: false, message: "Invalid user." } };
   }
 
-  const hasMed = await userHasActiveMedication(uid, parsed.value);
-  const applicable = applicableTasks(hasMed);
+  const applicable = applicableTasks();
 
   const res = await pool.query(
     `
@@ -172,17 +142,14 @@ async function putRoutineTask(userId, body) {
     };
   }
 
-  const hasMed = await userHasActiveMedication(uid, parsed.value);
-  const applicable = applicableTasks(hasMed);
+  const applicable = applicableTasks();
   if (!applicable.some((t) => t.key === taskKey)) {
     return {
       statusCode: 400,
       json: {
         ok: false,
         message:
-          taskKey === "give_medication"
-            ? "Medication task is not applicable; no active medication on your cats."
-            : "Task is not applicable for this date."
+          "Task is not applicable for this date."
       }
     };
   }

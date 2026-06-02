@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/health_record.dart';
 import '../services/cat_api_service.dart';
+import '../services/medication_api_service.dart';
 import '../services/vaccination_api_service.dart';
 import '../services/vet_visit_api_service.dart';
 import '../utils/turkish_date_format.dart';
@@ -30,6 +31,11 @@ class HealthScreenState extends State<HealthScreen>
         mode: VetSheetMode.create,
       );
 
+  /// Ana sayfa kısayolundan ilaç ekleme formunu açar.
+  Future<void> openAddMedication() => _openMedicationSheet(
+        mode: MedicationSheetMode.create,
+      );
+
   List<VaccineRecord> _vaccines = [];
   List<VaccineCatOption> _catOptions = [];
   bool _vaccinesLoading = true;
@@ -37,7 +43,9 @@ class HealthScreenState extends State<HealthScreen>
   List<VetAppointmentRecord> _vetAppointments = [];
   bool _vetVisitsLoading = true;
   String? _vetVisitsError;
-  final List<MedicationRecord> _medications = [];
+  List<MedicationRecord> _medications = [];
+  bool _medicationsLoading = true;
+  String? _medicationsError;
 
   @override
   bool get wantKeepAlive => true;
@@ -48,6 +56,7 @@ class HealthScreenState extends State<HealthScreen>
     _loadCatOptions();
     _loadVaccines();
     _loadVetVisits();
+    _loadMedications();
   }
 
   Future<void> _loadCatOptions() async {
@@ -214,22 +223,113 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  Future<void> _openMedicationSheet({MedicationRecord? existing}) async {
-    final record = await showModalBottomSheet<MedicationRecord>(
+  Future<void> _openMedicationSheet({
+    MedicationSheetMode mode = MedicationSheetMode.create,
+    MedicationRecord? existing,
+  }) async {
+    if (_catOptions.isEmpty) {
+      await _loadCatOptions();
+    }
+    if (!mounted) return;
+
+    if (_catOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('İlaç kaydı eklemek için önce bir kedi ekleyin.'),
+        ),
+      );
+      return;
+    }
+
+    final draft = await showModalBottomSheet<MedicationDraft>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddMedicationSheet(initial: existing),
+      builder: (_) => AddMedicationSheet(
+        cats: _catOptions,
+        initial: existing,
+        mode: mode,
+      ),
     );
-    if (record == null || !mounted) return;
-    setState(() {
-      if (existing != null) {
-        final i = _medications.indexWhere((m) => m.id == existing.id);
-        if (i >= 0) _medications[i] = record;
+    if (!mounted) return;
+    if (mode == MedicationSheetMode.view) return;
+    if (draft == null) return;
+
+    final updateId = draft.id ?? existing?.id;
+    final isUpdate = existing != null && updateId != null;
+
+    try {
+      if (isUpdate) {
+        await MedicationApiService.update(
+          medicationId: updateId,
+          catId: draft.catId,
+          medicationName: draft.name,
+          dosage: draft.dosage,
+          frequency: draft.frequencyKey,
+          startDate: draft.startDate,
+          endDate: draft.endDate,
+          notes: draft.notes,
+        );
       } else {
-        _medications.insert(0, record);
+        await MedicationApiService.create(
+          catId: draft.catId,
+          medicationName: draft.name,
+          dosage: draft.dosage,
+          frequency: draft.frequencyKey,
+          startDate: draft.startDate,
+          endDate: draft.endDate,
+          notes: draft.notes,
+        );
       }
-    });
+      if (!mounted) return;
+      await _loadMedications();
+    } on MedicationApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isUpdate ? 'İlaç kaydı güncellenemedi.' : 'İlaç kaydı kaydedilemedi.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadMedications() async {
+    if (mounted) {
+      setState(() {
+        _medicationsLoading = true;
+        _medicationsError = null;
+      });
+    }
+    try {
+      final meds = await MedicationApiService.fetchAll();
+
+      if (!mounted) return;
+      setState(() {
+        _medications = meds;
+        _medicationsLoading = false;
+        _medicationsError = null;
+      });
+    } on MedicationApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _medicationsError = e.message;
+        _medicationsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _medicationsError =
+            'İlaç kayıtları yüklenemedi. Sunucunun çalıştığından emin olun.';
+        _medicationsLoading = false;
+      });
+    }
   }
 
   Future<void> _openAddVaccine() async {
@@ -547,10 +647,6 @@ class HealthScreenState extends State<HealthScreen>
     );
   }
 
-  void _removeMedication(String id) {
-    setState(() => _medications.removeWhere((m) => m.id == id));
-  }
-
   Future<void> _confirmDeleteMedication(MedicationRecord record) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -574,8 +670,29 @@ class HealthScreenState extends State<HealthScreen>
         ],
       ),
     );
-    if (yes == true && mounted) _removeMedication(record.id);
+    if (yes != true || !mounted) return;
+    final id = record.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kayıt kimliği bulunamadı. Sayfayı yenileyin.')),
+      );
+      return;
+    }
+    try {
+      await MedicationApiService.delete(id);
+      if (!mounted) return;
+      await _loadMedications();
+    } on MedicationApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('İlaç kaydı silinemedi.')),
+      );
+    }
   }
+
 
   Widget _buildVaccineSection() {
     if (_vaccinesLoading) {
@@ -705,34 +822,75 @@ class HealthScreenState extends State<HealthScreen>
           _HealthSectionCard(
             title: 'İLAÇ TAKİBİ',
             onAdd: () => _openMedicationSheet(),
-            child: _sortedMedications.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Henüz ilaç kaydı yok. Sağ üstteki + ile ekleyin.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.35,
-                        color: HealthUi.muted.withValues(alpha: 0.9),
+            child: _medicationsLoading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
                       ),
                     ),
                   )
-                : Column(
-                    children: [
-                      for (final (i, record) in _sortedMedications.indexed) ...[
-                        if (i > 0)
-                          Divider(
-                            height: 1,
-                            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+                : _medicationsError != null
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            _medicationsError!,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.35,
+                              color: HealthUi.muted.withValues(alpha: 0.9),
+                            ),
                           ),
-                        _MedicationListTile(
-                          record: record,
-                          onTap: () => _openMedicationSheet(existing: record),
-                          onDelete: () => _confirmDeleteMedication(record),
-                        ),
-                      ],
-                    ],
-                  ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: _loadMedications,
+                            child: const Text('Yeniden dene'),
+                          ),
+                        ],
+                      )
+                    : _sortedMedications.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              'Henüz ilaç kaydı yok. Sağ üstteki + ile ekleyin.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.35,
+                                color: HealthUi.muted.withValues(alpha: 0.9),
+                              ),
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              for (final (i, record)
+                                  in _sortedMedications.indexed) ...[
+                                if (i > 0)
+                                  Divider(
+                                    height: 1,
+                                    color: HealthUi.fieldBorder
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                _MedicationListTile(
+                                  record: record,
+                                  onTap: () => _openMedicationSheet(
+                                    mode: MedicationSheetMode.view,
+                                    existing: record,
+                                  ),
+                                  onEdit: () =>
+                                      _openMedicationSheet(
+                                    mode: MedicationSheetMode.edit,
+                                    existing: record,
+                                  ),
+                                  onDelete: () =>
+                                      _confirmDeleteMedication(record),
+                                ),
+                              ],
+                            ],
+                          ),
           ),
         ],
       ),
@@ -1180,20 +1338,30 @@ class _MedicationListTile extends StatelessWidget {
   const _MedicationListTile({
     required this.record,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final MedicationRecord record;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final active = record.isActive;
-    final statusLabel = active ? 'Aktif' : 'Bitti';
-    final remainingLabel = record.stillUsing && record.daysRemaining > 0
+    final active = record.isActive && record.daysRemaining > 0;
+    final statusLabel = active ? 'Aktif' : 'Pasif';
+    final remainingLabel = record.daysRemaining > 0
         ? 'Kalan: ${record.daysRemaining} Gün'
         : 'Süresi doldu';
+    final freqTr = record.frequency == 'daily'
+        ? 'Günlük'
+        : record.frequency == 'weekly'
+            ? 'Haftalık'
+            : record.frequency == 'asNeeded'
+                ? 'Gerektiğinde'
+                : record.frequency;
+    final subtitle = '$freqTr · $remainingLabel';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1235,7 +1403,7 @@ class _MedicationListTile extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          record.frequency.labelTr,
+                          subtitle,
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -1250,15 +1418,6 @@ class _MedicationListTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        remainingLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: HealthUi.muted,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
                         statusLabel,
                         style: TextStyle(
                           fontSize: 12,
@@ -1272,6 +1431,17 @@ class _MedicationListTile extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+          IconButton(
+            onPressed: onEdit,
+            icon: Icon(
+              Icons.more_vert,
+              size: 22,
+              color: HealthUi.muted.withValues(alpha: 0.85),
+            ),
+            tooltip: 'Düzenle',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
           IconButton(
             onPressed: onDelete,

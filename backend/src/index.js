@@ -9,6 +9,7 @@ const catRoutes = require("./routes/cat.routes");
 const dailyRoutineRoutes = require("./routes/daily-routine.routes");
 const vaccinationRoutes = require("./routes/vaccination.routes");
 const vetVisitRoutes = require("./routes/vet-visit.routes");
+const medicationRoutes = require("./routes/medication.routes");
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use("/api/cats", catRoutes);
 app.use("/api/daily-routine", dailyRoutineRoutes);
 app.use("/api/vaccinations", vaccinationRoutes);
 app.use("/api/vet-visits", vetVisitRoutes);
+app.use("/api/medications", medicationRoutes);
 
 const basePort = Number(process.env.PORT) || 3001;
 

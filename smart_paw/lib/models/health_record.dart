@@ -146,26 +146,118 @@ extension MedicationFrequencyLabels on MedicationFrequency {
   };
 }
 
+class MedicationScheduleRecord {
+  MedicationScheduleRecord({
+    required this.scheduleId,
+    required this.reminderTime,
+    this.isActive = true,
+    this.isTakenToday = false,
+  });
+
+  final int scheduleId;
+  final String reminderTime; // HH:MM:SS
+  final bool isActive;
+  final bool isTakenToday;
+
+  static int _parseId(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value == true) return true;
+    if (value == false || value == null) return false;
+    if (value is num) return value != 0;
+    final s = value.toString().trim().toLowerCase();
+    return s == 'true' || s == '1';
+  }
+
+  factory MedicationScheduleRecord.fromJson(Map<String, dynamic> json) {
+    return MedicationScheduleRecord(
+      scheduleId: _parseId(json['schedule_id']),
+      reminderTime: json['reminder_time']?.toString() ?? '00:00:00',
+      isActive: _parseBool(json['is_active']),
+      isTakenToday: _parseBool(json['is_taken_today']),
+    );
+  }
+}
+
 class MedicationRecord {
   MedicationRecord({
-    String? id,
+    this.id,
+    required this.catId,
+    this.catName,
     required this.name,
     required this.dosage,
     required this.frequency,
     required this.startDate,
     required this.endDate,
-    this.stillUsing = true,
     this.notes = '',
-  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+    this.isActive = true,
+    this.schedules = const [],
+  });
 
-  final String id;
+  final int? id;
+  final int catId;
+  final String? catName;
   final String name;
   final String dosage;
-  final MedicationFrequency frequency;
+  final String frequency;
   final DateTime startDate;
   final DateTime endDate;
-  final bool stillUsing;
   final String notes;
+  final bool isActive;
+  // schedules are kept for backward compatibility; day-based tracking uses is_taken_today via schedule endpoint.
+  final List<MedicationScheduleRecord> schedules;
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.parse(s.length <= 10 ? '${s}T12:00:00.000' : s);
+  }
+
+  static int? _parseId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value == true) return true;
+    if (value == false || value == null) return false;
+    if (value is num) return value != 0;
+    final s = value.toString().trim().toLowerCase();
+    return s == 'true' || s == '1';
+  }
+
+  factory MedicationRecord.fromJson(Map<String, dynamic> json) {
+    final schedRaw = json['schedules'];
+    final schedules = (schedRaw is List)
+        ? schedRaw
+            .whereType<Map>()
+            .map((e) =>
+                MedicationScheduleRecord.fromJson(e.cast<String, dynamic>()))
+            .toList(growable: false)
+        : const <MedicationScheduleRecord>[];
+
+    return MedicationRecord(
+      id: _parseId(json['medication_id']),
+      catId: _parseId(json['cat_id']) ?? 0,
+      catName: json['cat_name']?.toString(),
+      name: json['medication_name']?.toString() ?? '',
+      dosage: json['dosage']?.toString() ?? '',
+      frequency: json['frequency']?.toString() ?? '',
+      startDate: _parseDate(json['start_date']) ?? DateTime.now(),
+      endDate: _parseDate(json['end_date']) ?? DateTime.now(),
+      notes: json['notes']?.toString() ?? '',
+      isActive: _parseBool(json['is_active']),
+      schedules: schedules,
+    );
+  }
 
   int get daysRemaining {
     final today = DateTime.now();
@@ -173,8 +265,6 @@ class MedicationRecord {
     final now = DateTime(today.year, today.month, today.day);
     return end.difference(now).inDays.clamp(0, 9999);
   }
-
-  bool get isActive => stillUsing && daysRemaining > 0;
 
   String get displayTitle {
     final d = dosage.trim();

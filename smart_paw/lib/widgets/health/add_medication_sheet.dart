@@ -1,19 +1,54 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../models/health_record.dart';
 import '../../utils/turkish_date_format.dart';
+import 'add_vaccine_sheet.dart';
 import 'health_ui.dart';
 
 /// İlaç ekleme / düzenleme — alt sayfa formu.
+enum MedicationSheetMode { create, view, edit }
+
 class AddMedicationSheet extends StatefulWidget {
-  const AddMedicationSheet({super.key, this.initial});
+  const AddMedicationSheet({
+    super.key,
+    required this.cats,
+    this.initial,
+    this.mode = MedicationSheetMode.create,
+  });
+
+  final List<VaccineCatOption> cats;
 
   final MedicationRecord? initial;
+  final MedicationSheetMode mode;
 
-  bool get isEditing => initial != null;
+  bool get readOnly => mode == MedicationSheetMode.view;
+  bool get isEditing => mode == MedicationSheetMode.edit;
 
   @override
   State<AddMedicationSheet> createState() => _AddMedicationSheetState();
+}
+
+class MedicationDraft {
+  const MedicationDraft({
+    this.id,
+    required this.catId,
+    required this.name,
+    required this.dosage,
+    required this.frequencyKey,
+    required this.startDate,
+    required this.endDate,
+    required this.notes,
+  });
+
+  final int? id;
+  final int catId;
+  final String name;
+  final String dosage;
+  final String frequencyKey; // daily|weekly|asNeeded
+  final DateTime startDate;
+  final DateTime endDate;
+  final String notes;
 }
 
 class _AddMedicationSheetState extends State<AddMedicationSheet> {
@@ -24,37 +59,64 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
   MedicationFrequency _frequency = MedicationFrequency.daily;
   DateTime? _startDate;
   DateTime? _endDate;
-  bool _stillUsing = true;
+  int? _catId;
+  String? _validationMessage;
+  Timer? _validationTimer;
+
+  bool get _readOnly => widget.readOnly;
+
+  String _catLabel(int? catId) {
+    if (catId == null) return '—';
+    for (final c in widget.cats) {
+      if (c.catId == catId) return c.name;
+    }
+    return widget.initial?.catName ?? '—';
+  }
 
   @override
   void initState() {
     super.initState();
     final ini = widget.initial;
     if (ini != null) {
+      _catId = ini.catId;
       _nameCtrl.text = ini.name;
       _dosageCtrl.text = ini.dosage;
       _notesCtrl.text = ini.notes;
-      _frequency = ini.frequency;
+      _frequency = _frequencyFromKey(ini.frequency);
       _startDate = ini.startDate;
       _endDate = ini.endDate;
-      _stillUsing = ini.stillUsing;
     }
+    // Don't auto-select a cat; show "Kedi seçin" placeholder like vaccination flow.
   }
 
   @override
   void dispose() {
+    _validationTimer?.cancel();
     _nameCtrl.dispose();
     _dosageCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
 
+  void _showRequiredFieldsSnack() {
+    setState(() => _validationMessage = 'Zorunlu alanları doldurunuz.');
+    _validationTimer?.cancel();
+    _validationTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _validationMessage = null);
+    });
+  }
+
   Future<void> _pickDate({required bool isEnd}) async {
+    if (_readOnly) return;
     final now = DateTime.now();
+    final startDay = _startDate != null
+        ? DateTime(_startDate!.year, _startDate!.month, _startDate!.day)
+        : null;
     final picked = await showDatePicker(
       context: context,
-      initialDate: (isEnd ? _endDate : _startDate) ?? now,
-      firstDate: DateTime(now.year - 10),
+      initialDate: (isEnd ? _endDate : _startDate) ??
+          (isEnd && startDay != null ? startDay : now),
+      firstDate: isEnd && startDay != null ? startDay : DateTime(now.year - 10),
       lastDate: DateTime(now.year + 10),
       locale: const Locale('tr'),
     );
@@ -64,28 +126,28 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
         _endDate = picked;
       } else {
         _startDate = picked;
+        if (_endDate != null) {
+          final end = DateTime(_endDate!.year, _endDate!.month, _endDate!.day);
+          final start = DateTime(picked.year, picked.month, picked.day);
+          if (end.isBefore(start)) {
+            _endDate = null;
+          }
+        }
       }
     });
   }
 
   void _save() {
+    if (_readOnly) return;
     final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('İlaç adını girin.')),
-      );
-      return;
-    }
-    if (_startDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Başlangıç tarihini seçin.')),
-      );
-      return;
-    }
-    if (_endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitiş tarihini seçin.')),
-      );
+    final dosage = _dosageCtrl.text.trim();
+    if (_catId == null ||
+        _catId! <= 0 ||
+        name.isEmpty ||
+        dosage.isEmpty ||
+        _startDate == null ||
+        _endDate == null) {
+      _showRequiredFieldsSnack();
       return;
     }
     final start = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
@@ -99,14 +161,14 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
 
     Navigator.pop(
       context,
-      MedicationRecord(
+      MedicationDraft(
         id: widget.initial?.id,
+        catId: _catId!,
         name: name,
-        dosage: _dosageCtrl.text.trim(),
-        frequency: _frequency,
+        dosage: dosage,
+        frequencyKey: _frequencyKey(_frequency),
         startDate: start,
         endDate: end,
-        stillUsing: _stillUsing,
         notes: _notesCtrl.text.trim(),
       ),
     );
@@ -163,9 +225,11 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.isEditing
-                                ? 'İlacı Düzenle'
-                                : 'Yeni İlaç',
+                            switch (widget.mode) {
+                              MedicationSheetMode.create => 'Yeni İlaç',
+                              MedicationSheetMode.view => 'İlaç Kaydı',
+                              MedicationSheetMode.edit => 'İlacı Düzenle',
+                            },
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
@@ -174,9 +238,13 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            widget.isEditing
-                                ? 'İlaç bilgilerini güncelleyin.'
-                                : 'Kedinizin ilaç takibini düzenli tutun.',
+                            switch (widget.mode) {
+                              MedicationSheetMode.create =>
+                                'Kedinizin ilaç takibini düzenli tutun.',
+                              MedicationSheetMode.view => 'Kayıtlı ilaç bilgileri.',
+                              MedicationSheetMode.edit =>
+                                'İlaç bilgilerini güncelleyin.',
+                            },
                             style: TextStyle(
                               fontSize: 13,
                               height: 1.35,
@@ -190,28 +258,54 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                 ),
                 const SizedBox(height: 24),
                 _LabeledField(
+                  label: 'Kedi',
+                  child: _readOnly
+                      ? _ReadOnlyField(value: _catLabel(_catId))
+                      : DropdownButtonFormField<int>(
+                          value: _catId,
+                          hint: const Text('Kedi seçin'),
+                          items: widget.cats
+                              .map(
+                                (c) => DropdownMenuItem<int>(
+                                  value: c.catId,
+                                  child: Text(c.name),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (v) => setState(() => _catId = v),
+                          decoration: _inputDecoration(hint: 'Kedi seçin'),
+                        ),
+                ),
+                const SizedBox(height: 16),
+                _LabeledField(
                   label: 'İlaç Adı',
-                  child: TextField(
-                    controller: _nameCtrl,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: _inputDecoration(hint: 'Örn. Antibiyotik'),
-                  ),
+                  child: _readOnly
+                      ? _ReadOnlyField(value: _nameCtrl.text.trim().isEmpty ? '—' : _nameCtrl.text.trim())
+                      : TextField(
+                          controller: _nameCtrl,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: _inputDecoration(hint: 'Örn. Antibiyotik'),
+                        ),
                 ),
                 const SizedBox(height: 16),
                 _LabeledField(
                   label: 'Dozaj',
-                  child: TextField(
-                    controller: _dosageCtrl,
-                    decoration: _inputDecoration(hint: 'Örn. 250 mg'),
-                  ),
+                  child: _readOnly
+                      ? _ReadOnlyField(value: _dosageCtrl.text.trim().isEmpty ? '—' : _dosageCtrl.text.trim())
+                      : TextField(
+                          controller: _dosageCtrl,
+                          decoration: _inputDecoration(hint: 'Örn. 250 mg'),
+                        ),
                 ),
                 const SizedBox(height: 16),
                 _LabeledField(
                   label: 'Sıklık',
-                  child: _FrequencySegments(
-                    selected: _frequency,
-                    onChanged: (f) => setState(() => _frequency = f),
-                  ),
+                  child: _readOnly
+                      ? _ReadOnlyField(value: _frequency.segmentTr)
+                      : _FrequencySegments(
+                          selected: _frequency,
+                          onChanged: (f) => setState(() => _frequency = f),
+                        ),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -222,6 +316,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                         child: _DateField(
                           value: _startDate,
                           onTap: () => _pickDate(isEnd: false),
+                          readOnly: _readOnly,
                         ),
                       ),
                     ),
@@ -232,67 +327,66 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                         child: _DateField(
                           value: _endDate,
                           onTap: () => _pickDate(isEnd: true),
+                          readOnly: _readOnly,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Hâlâ kullanıyor mu?',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: HealthUi.titleInk,
-                        ),
-                      ),
-                    ),
-                    Switch(
-                      value: _stillUsing,
-                      onChanged: (v) => setState(() => _stillUsing = v),
-                      activeTrackColor: HealthUi.accentPink.withValues(alpha: 0.5),
-                      activeThumbColor: HealthUi.accentPink,
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 _LabeledField(
                   label: 'Notlar',
-                  child: TextField(
-                    controller: _notesCtrl,
-                    minLines: 3,
-                    maxLines: 5,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: _inputDecoration(
-                      hint: 'Örn. Tok karnına, ek bilgi (isteğe bağlı)',
+                  child: _readOnly
+                      ? _ReadOnlyField(
+                          value: _notesCtrl.text.trim().isEmpty ? '—' : _notesCtrl.text.trim(),
+                          minLines: 3,
+                        )
+                      : TextField(
+                          controller: _notesCtrl,
+                          minLines: 3,
+                          maxLines: 5,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: _inputDecoration(
+                            hint: 'Örn. Tok karnına, ek bilgi (isteğe bağlı)',
+                          ),
+                        ),
+                ),
+                if (_validationMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _validationMessage!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: HealthUi.accentPink,
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _save,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: HealthUi.accentPink,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                ],
+                if (!_readOnly) ...[
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _save,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: HealthUi.accentPink,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                    ),
-                    child: const Text(
-                      'Kaydet',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                      child: const Text(
+                        'Kaydet',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -301,6 +395,52 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
     );
   }
 }
+
+class _ReadOnlyField extends StatelessWidget {
+  const _ReadOnlyField({
+    required this.value,
+    this.minLines = 1,
+  });
+
+  final String value;
+  final int minLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: _inputDecoration(hint: ''),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          value,
+          maxLines: minLines > 1 ? minLines + 2 : 1,
+          overflow: TextOverflow.visible,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: HealthUi.titleInk,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+MedicationFrequency _frequencyFromKey(String key) {
+  final k = key.trim();
+  return switch (k) {
+    'daily' => MedicationFrequency.daily,
+    'weekly' => MedicationFrequency.weekly,
+    'asNeeded' => MedicationFrequency.asNeeded,
+    _ => MedicationFrequency.daily,
+  };
+}
+
+String _frequencyKey(MedicationFrequency f) => switch (f) {
+      MedicationFrequency.daily => 'daily',
+      MedicationFrequency.weekly => 'weekly',
+      MedicationFrequency.asNeeded => 'asNeeded',
+    };
 
 class _FrequencySegments extends StatelessWidget {
   const _FrequencySegments({
@@ -403,15 +543,20 @@ class _LabeledField extends StatelessWidget {
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({required this.value, required this.onTap});
+  const _DateField({
+    required this.value,
+    required this.onTap,
+    this.readOnly = false,
+  });
 
   final DateTime? value;
   final VoidCallback onTap;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: readOnly ? null : onTap,
       borderRadius: BorderRadius.circular(12),
       child: InputDecorator(
         decoration: _inputDecoration(hint: 'Tarih seçin'),
@@ -427,11 +572,12 @@ class _DateField extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(
-              Icons.calendar_today_outlined,
-              size: 20,
-              color: HealthUi.muted.withValues(alpha: 0.8),
-            ),
+            if (!readOnly)
+              Icon(
+                Icons.calendar_today_outlined,
+                size: 20,
+                color: HealthUi.muted.withValues(alpha: 0.8),
+              ),
           ],
         ),
       ),

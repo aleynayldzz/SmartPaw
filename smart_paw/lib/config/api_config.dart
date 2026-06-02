@@ -40,4 +40,18 @@ class ApiConfig {
 
   static Uri vetVisitUri(int visitId) =>
       Uri.parse('$baseUrl/api/vet-visits/$visitId');
+
+  static Uri medicationsUri() => Uri.parse('$baseUrl/api/medications');
+
+  static Uri medicationUri(int medicationId) =>
+      Uri.parse('$baseUrl/api/medications/$medicationId');
+
+  static Uri medicationScheduleUri({String? date}) {
+    final base = '$baseUrl/api/medications/schedule';
+    if (date == null || date.isEmpty) return Uri.parse(base);
+    return Uri.parse(base).replace(queryParameters: {'date': date});
+  }
+
+  static Uri medicationTakenUri(int medicationId) =>
+      Uri.parse('$baseUrl/api/medications/$medicationId/taken');
 }
