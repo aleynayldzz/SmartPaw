@@ -179,6 +179,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
+  void _openQuickAddVetVisit() {
+    setState(() => _navIndex = _healthTabIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _healthKey.currentState?.openAddVetVisit();
+    });
+  }
+
   void _openNotifications() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
@@ -242,9 +249,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onQuickMyCats: _openMyCats,
                       onQuickAddCat: _openQuickAddCat,
                       onQuickNotifications: _openNotifications,
-                      onQuickAddVetVisit: () {
-                        setState(() => _navIndex = _healthTabIndex);
-                      },
+                      onQuickAddVetVisit: _openQuickAddVetVisit,
                       onQuickVaccine: _openQuickAddVaccine,
                       onQuickMedication: () {
                         setState(() => _navIndex = _healthTabIndex);

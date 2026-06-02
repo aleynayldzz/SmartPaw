@@ -35,4 +35,9 @@ class ApiConfig {
 
   static Uri vaccinationUri(int vaccinationId) =>
       Uri.parse('$baseUrl/api/vaccinations/$vaccinationId');
+
+  static Uri vetVisitsUri() => Uri.parse('$baseUrl/api/vet-visits');
+
+  static Uri vetVisitUri(int visitId) =>
+      Uri.parse('$baseUrl/api/vet-visits/$visitId');
 }

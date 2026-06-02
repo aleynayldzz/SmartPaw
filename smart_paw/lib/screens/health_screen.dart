@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/health_record.dart';
 import '../services/cat_api_service.dart';
 import '../services/vaccination_api_service.dart';
+import '../services/vet_visit_api_service.dart';
 import '../utils/turkish_date_format.dart';
 import '../widgets/health/add_medication_sheet.dart';
 import '../widgets/health/add_vaccine_sheet.dart';
@@ -24,11 +25,18 @@ class HealthScreenState extends State<HealthScreen>
   /// Ana sayfa kısayolundan aşı ekleme formunu açar.
   Future<void> openAddVaccine() => _openAddVaccine();
 
+  /// Ana sayfa kısayolundan veteriner ziyareti ekleme formunu açar.
+  Future<void> openAddVetVisit() => _openVetAppointmentSheet(
+        mode: VetSheetMode.create,
+      );
+
   List<VaccineRecord> _vaccines = [];
   List<VaccineCatOption> _catOptions = [];
   bool _vaccinesLoading = true;
   String? _vaccinesError;
-  final List<VetAppointmentRecord> _vetAppointments = [];
+  List<VetAppointmentRecord> _vetAppointments = [];
+  bool _vetVisitsLoading = true;
+  String? _vetVisitsError;
   final List<MedicationRecord> _medications = [];
 
   @override
@@ -37,19 +45,14 @@ class HealthScreenState extends State<HealthScreen>
   @override
   void initState() {
     super.initState();
+    _loadCatOptions();
     _loadVaccines();
+    _loadVetVisits();
   }
 
-  Future<void> _loadVaccines() async {
-    if (mounted) {
-      setState(() {
-        _vaccinesLoading = true;
-        _vaccinesError = null;
-      });
-    }
+  Future<void> _loadCatOptions() async {
     try {
       final cats = await CatApiService.fetchMyCats();
-      final vaccines = await VaccinationApiService.fetchAll();
       if (!mounted) return;
       setState(() {
         _catOptions = cats
@@ -60,17 +63,35 @@ class HealthScreenState extends State<HealthScreen>
               ),
             )
             .toList(growable: false);
+      });
+    } on CatApiException catch (_) {
+      if (!mounted) return;
+      setState(() => _catOptions = []);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _catOptions = []);
+    }
+  }
+
+  Future<void> _loadVaccines() async {
+    if (mounted) {
+      setState(() {
+        _vaccinesLoading = true;
+        _vaccinesError = null;
+      });
+    }
+    try {
+      if (_catOptions.isEmpty) {
+        await _loadCatOptions();
+      }
+      final vaccines = await VaccinationApiService.fetchAll();
+      if (!mounted) return;
+      setState(() {
         _vaccines = vaccines;
         _vaccinesLoading = false;
         _vaccinesError = null;
       });
     } on VaccinationApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _vaccinesError = e.message;
-        _vaccinesLoading = false;
-      });
-    } on CatApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _vaccinesError = e.message;
@@ -86,22 +107,111 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  Future<void> _openVetAppointmentSheet({VetAppointmentRecord? existing}) async {
-    final record = await showModalBottomSheet<VetAppointmentRecord>(
+  Future<void> _loadVetVisits() async {
+    if (mounted) {
+      setState(() {
+        _vetVisitsLoading = true;
+        _vetVisitsError = null;
+      });
+    }
+    try {
+      final visits = await VetVisitApiService.fetchAll();
+      if (!mounted) return;
+      setState(() {
+        _vetAppointments = visits;
+        _vetVisitsLoading = false;
+        _vetVisitsError = null;
+      });
+    } on VetVisitApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _vetVisitsError = e.message;
+        _vetVisitsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _vetVisitsError =
+            'Veteriner kayıtları yüklenemedi. Sunucunun çalıştığından emin olun.';
+        _vetVisitsLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openVetAppointmentSheet({
+    VetSheetMode mode = VetSheetMode.create,
+    VetAppointmentRecord? existing,
+  }) async {
+    if (_catOptions.isEmpty) {
+      await _loadCatOptions();
+    }
+    if (!mounted) return;
+
+    if (_catOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veteriner kaydı eklemek için önce bir kedi ekleyin.'),
+        ),
+      );
+      return;
+    }
+
+    final draft = await showModalBottomSheet<VetAppointmentRecord>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddVetAppointmentSheet(initial: existing),
+      builder: (_) => AddVetAppointmentSheet(
+        cats: _catOptions,
+        initial: existing,
+        mode: mode,
+      ),
     );
-    if (record == null || !mounted) return;
-    setState(() {
-      if (existing != null) {
-        final i = _vetAppointments.indexWhere((v) => v.id == existing.id);
-        if (i >= 0) _vetAppointments[i] = record;
+    if (draft == null || !mounted) return;
+    if (mode == VetSheetMode.view) return;
+
+    final updateId = draft.id ?? existing?.id;
+    final isUpdate = mode == VetSheetMode.edit && updateId != null;
+
+    try {
+      if (isUpdate) {
+        await VetVisitApiService.update(
+          visitId: updateId,
+          catId: draft.catId,
+          visitDate: draft.visitDate,
+          weight: draft.weightKg,
+          reason: draft.reason,
+          doctorNotes: draft.doctorNotes,
+          nextVisitDate: draft.nextVisitDate,
+        );
       } else {
-        _vetAppointments.insert(0, record);
+        await VetVisitApiService.create(
+          catId: draft.catId,
+          visitDate: draft.visitDate,
+          weight: draft.weightKg,
+          reason: draft.reason,
+          doctorNotes: draft.doctorNotes,
+          nextVisitDate: draft.nextVisitDate,
+        );
       }
-    });
+      if (!mounted) return;
+      await _loadVetVisits();
+    } on VetVisitApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isUpdate
+                ? 'Veteriner kaydı güncellenemedi.'
+                : 'Veteriner kaydı kaydedilemedi.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _openMedicationSheet({MedicationRecord? existing}) async {
@@ -130,8 +240,8 @@ class HealthScreenState extends State<HealthScreen>
     required VaccineSheetMode mode,
     VaccineRecord? existing,
   }) async {
-    if (_catOptions.isEmpty && !_vaccinesLoading) {
-      await _loadVaccines();
+    if (_catOptions.isEmpty) {
+      await _loadCatOptions();
     }
     if (!mounted) return;
 
@@ -223,6 +333,14 @@ class HealthScreenState extends State<HealthScreen>
     return copy;
   }
 
+  List<VetAppointmentRecord> get _upcomingVetVisits {
+    final copy = _vetAppointments.where((v) => v.isUpcoming).toList();
+    copy.sort(
+      (a, b) => a.nextVisitDate!.compareTo(b.nextVisitDate!),
+    );
+    return copy;
+  }
+
   List<MedicationRecord> get _sortedMedications {
     final copy = List<MedicationRecord>.from(_medications);
     copy.sort((a, b) => b.startDate.compareTo(a.startDate));
@@ -278,10 +396,6 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  void _removeVetAppointment(String id) {
-    setState(() => _vetAppointments.removeWhere((v) => v.id == id));
-  }
-
   Future<void> _confirmDeleteVetAppointment(VetAppointmentRecord record) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -305,7 +419,132 @@ class HealthScreenState extends State<HealthScreen>
         ],
       ),
     );
-    if (yes == true && mounted) _removeVetAppointment(record.id);
+    if (yes != true || !mounted) return;
+    final id = record.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kayıt kimliği bulunamadı. Sayfayı yenileyin.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await VetVisitApiService.delete(id);
+      if (!mounted) return;
+      await _loadVetVisits();
+    } on VetVisitApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veteriner kaydı silinemedi.')),
+      );
+    }
+  }
+
+  Widget _buildVetVisitSection() {
+    if (_vetVisitsLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_vetVisitsError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _vetVisitsError!,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.35,
+              color: HealthUi.muted.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _loadVetVisits,
+            child: const Text('Yeniden dene'),
+          ),
+        ],
+      );
+    }
+
+    if (_sortedVetAppointments.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          'Henüz randevu kaydı yok. Sağ üstteki + ile ekleyin.',
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.35,
+            color: HealthUi.muted.withValues(alpha: 0.9),
+          ),
+        ),
+      );
+    }
+
+    final upcoming = _upcomingVetVisits;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (upcoming.isNotEmpty) ...[
+          const Text(
+            'YAKLAŞAN VETERİNER ZİYARETLERİ',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: HealthUi.accentPink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final record in upcoming)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _UpcomingVetVisitChip(record: record),
+            ),
+          const SizedBox(height: 12),
+          Divider(
+            height: 1,
+            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+        ],
+        for (final (i, record) in _sortedVetAppointments.indexed) ...[
+          if (i > 0)
+            Divider(
+              height: 1,
+              color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+            ),
+          _VetAppointmentListTile(
+            record: record,
+            onTap: () => _openVetAppointmentSheet(
+              mode: VetSheetMode.view,
+              existing: record,
+            ),
+            onEdit: () => _openVetAppointmentSheet(
+              mode: VetSheetMode.edit,
+              existing: record,
+            ),
+            onDelete: () => _confirmDeleteVetAppointment(record),
+          ),
+        ],
+      ],
+    );
   }
 
   void _removeMedication(String id) {
@@ -457,35 +696,10 @@ class HealthScreenState extends State<HealthScreen>
           const SizedBox(height: 16),
           _HealthSectionCard(
             title: 'VETERİNER RANDEVULARI',
-            onAdd: () => _openVetAppointmentSheet(),
-            child: _sortedVetAppointments.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Henüz randevu kaydı yok. Sağ üstteki + ile ekleyin.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.35,
-                        color: HealthUi.muted.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  )
-                : Column(
-                    children: [
-                      for (final (i, record) in _sortedVetAppointments.indexed) ...[
-                        if (i > 0)
-                          Divider(
-                            height: 1,
-                            color: HealthUi.fieldBorder.withValues(alpha: 0.6),
-                          ),
-                        _VetAppointmentListTile(
-                          record: record,
-                          onTap: () => _openVetAppointmentSheet(existing: record),
-                          onDelete: () => _confirmDeleteVetAppointment(record),
-                        ),
-                      ],
-                    ],
-                  ),
+            onAdd: _vetVisitsLoading
+                ? () {}
+                : () => _openVetAppointmentSheet(mode: VetSheetMode.create),
+            child: _buildVetVisitSection(),
           ),
           const SizedBox(height: 16),
           _HealthSectionCard(
@@ -670,6 +884,51 @@ class _UpcomingVaccineChip extends StatelessWidget {
   }
 }
 
+class _UpcomingVetVisitChip extends StatelessWidget {
+  const _UpcomingVetVisitChip({required this.record});
+
+  final VetAppointmentRecord record;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = record.nextVisitDate!;
+    final catLabel = (record.catName?.isNotEmpty ?? false)
+        ? ' · ${record.catName}'
+        : '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: HealthUi.accentPink.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: HealthUi.accentPink.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_outlined,
+            size: 18,
+            color: HealthUi.accentPink,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${record.reason}$catLabel — ${formatTurkishDate(next)}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: HealthUi.titleInk,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _VaccineListTile extends StatelessWidget {
   const _VaccineListTile({
     required this.record,
@@ -797,15 +1056,31 @@ class _VetAppointmentListTile extends StatelessWidget {
   const _VetAppointmentListTile({
     required this.record,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final VetAppointmentRecord record;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  String get _catNameLabel {
+    final n = record.catName?.trim();
+    return (n != null && n.isNotEmpty) ? n : 'Kedi';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final subtitleParts = <String>[
+      _catNameLabel,
+      formatTurkishDate(record.visitDate),
+      '${record.weightKg.toStringAsFixed(1)} kg',
+      if (record.nextVisitDate != null)
+        'Sonraki: ${formatTurkishDate(record.nextVisitDate!)}',
+    ];
+    final notes = record.doctorNotes.trim();
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -846,19 +1121,43 @@ class _VetAppointmentListTile extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          formatTurkishDate(record.visitDate),
+                          subtitleParts.join(' · '),
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: HealthUi.muted,
                           ),
                         ),
+                        if (notes.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            notes,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: HealthUi.muted.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+          IconButton(
+            onPressed: onEdit,
+            icon: Icon(
+              Icons.more_vert,
+              size: 22,
+              color: HealthUi.muted.withValues(alpha: 0.85),
+            ),
+            tooltip: 'Düzenle',
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
           IconButton(
             onPressed: onDelete,

@@ -68,36 +68,82 @@ class VaccineRecord {
 
 class VetAppointmentRecord {
   VetAppointmentRecord({
-    String? id,
+    this.id,
+    required this.catId,
     required this.visitDate,
     required this.reason,
     required this.weightKg,
+    this.catName,
     this.doctorNotes = '',
     this.nextVisitDate,
-  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+  });
 
-  final String id;
+  final int? id;
+  final int catId;
+  final String? catName;
   final DateTime visitDate;
   final String reason;
   final double weightKg;
   final String doctorNotes;
   final DateTime? nextVisitDate;
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.parse(s.length <= 10 ? '${s}T12:00:00.000' : s);
+  }
+
+  static int? _parseId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  static double _parseWeight(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
+  }
+
+  factory VetAppointmentRecord.fromJson(Map<String, dynamic> json) {
+    return VetAppointmentRecord(
+      id: _parseId(json['visit_id']),
+      catId: _parseId(json['cat_id']) ?? 0,
+      catName: json['cat_name']?.toString(),
+      visitDate: _parseDate(json['visit_date'])!,
+      reason: json['reason']?.toString() ?? '',
+      weightKg: _parseWeight(json['weight']),
+      doctorNotes: json['doctor_notes']?.toString() ?? '',
+      nextVisitDate: _parseDate(json['next_visit_date']),
+    );
+  }
+
+  bool get isUpcoming {
+    final next = nextVisitDate;
+    if (next == null) return false;
+    final today = DateTime.now();
+    final end = DateTime(today.year, today.month, today.day);
+    final due = DateTime(next.year, next.month, next.day);
+    return !due.isBefore(end);
+  }
 }
 
 enum MedicationFrequency { daily, weekly, asNeeded }
 
 extension MedicationFrequencyLabels on MedicationFrequency {
   String get labelTr => switch (this) {
-        MedicationFrequency.daily => 'Günde 1 kez',
-        MedicationFrequency.weekly => 'Haftada 1 kez',
-        MedicationFrequency.asNeeded => 'Gerektiğinde',
-      };
+    MedicationFrequency.daily => 'Günde 1 kez',
+    MedicationFrequency.weekly => 'Haftada 1 kez',
+    MedicationFrequency.asNeeded => 'Gerektiğinde',
+  };
 
   String get segmentTr => switch (this) {
-        MedicationFrequency.daily => 'Günlük',
-        MedicationFrequency.weekly => 'Haftalık',
-        MedicationFrequency.asNeeded => 'Gerektiğinde',
-      };
+    MedicationFrequency.daily => 'Günlük',
+    MedicationFrequency.weekly => 'Haftalık',
+    MedicationFrequency.asNeeded => 'Gerektiğinde',
+  };
 }
 
 class MedicationRecord {
