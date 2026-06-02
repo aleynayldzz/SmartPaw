@@ -262,7 +262,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                   child: _readOnly
                       ? _ReadOnlyField(value: _catLabel(_catId))
                       : DropdownButtonFormField<int>(
-                          value: _catId,
+                          initialValue: _catId,
                           hint: const Text('Kedi seçin'),
                           items: widget.cats
                               .map(
