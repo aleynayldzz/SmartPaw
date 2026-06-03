@@ -17,6 +17,26 @@ String formatTurkishDate(DateTime date) {
   return '${date.day} ${_turkishMonths[date.month - 1]} ${date.year}';
 }
 
+const _turkishMonthsShort = <String>[
+  'Oca',
+  'Şub',
+  'Mar',
+  'Nis',
+  'May',
+  'Haz',
+  'Tem',
+  'Ağu',
+  'Eyl',
+  'Eki',
+  'Kas',
+  'Ara',
+];
+
+/// Kısa ay adı — örn. "1 May 2024"
+String formatTurkishDateShort(DateTime date) {
+  return '${date.day} ${_turkishMonthsShort[date.month - 1]} ${date.year}';
+}
+
 String formatTurkishDateTime(DateTime dateTime) {
   final h = dateTime.hour.toString().padLeft(2, '0');
   final m = dateTime.minute.toString().padLeft(2, '0');

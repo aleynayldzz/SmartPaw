@@ -7,6 +7,7 @@ import '../services/auth_session.dart';
 import '../services/daily_routine_api_service.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
+import 'care_screen.dart';
 import 'health_screen.dart';
 import 'my_cats_screen.dart';
 import 'notifications_screen.dart';
@@ -200,9 +201,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _openMyCats() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const MyCatsScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute<void>(builder: (_) => const MyCatsScreen()));
   }
 
   @override
@@ -210,9 +211,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     const titleColor = Color(0xFF3E3E3E);
 
     return Scaffold(
-      appBar: _navIndex == _profileTabIndex ||
+      appBar:
+          _navIndex == _profileTabIndex ||
               _navIndex == 0 ||
-              _navIndex == _healthTabIndex
+              _navIndex == _healthTabIndex ||
+              _navIndex == 2
           ? null
           : AppBar(
               backgroundColor: Colors.transparent,
@@ -267,7 +270,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         _loadDailyRoutine();
                       },
                     ),
-                    const _NavPlaceholderTab(),
+                    CareScreen(
+                      onBackToHome: () {
+                        setState(() => _navIndex = 0);
+                        _loadDailyRoutine();
+                      },
+                    ),
                     const _NavPlaceholderTab(),
                   ],
                 ),
@@ -468,6 +476,7 @@ class _QuickActionsGrid extends StatelessWidget {
   final VoidCallback onMedication;
 
   static const Color _ink = Color(0xFF2C2825);
+
   /// Referans #E39695 tonunda açık kart zemini
   static const Color _tileBg = Color(0xFFF5DADA);
 
