@@ -1,5 +1,7 @@
 // Mama takibi modeli — açılış tarihinden itibaren günlük tüketimle hesaplanır.
 
+enum FoodSupplyStatus { ok, warning, critical }
+
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
 class FoodTrackingRecord {
@@ -51,12 +53,18 @@ class FoodTrackingRecord {
     return estimatedFinishDate(reference).difference(today).inDays;
   }
 
-  /// 1 haftalık veya daha az mama kaldığında uyarı.
-  bool get isRunningLow {
-    final remaining = remainingGrams();
-    if (remaining <= 0 || dailyFoodGrams <= 0) return false;
-    return daysUntilFinish() <= 7;
+  FoodSupplyStatus status([DateTime? reference]) {
+    if (dailyFoodGrams <= 0) return FoodSupplyStatus.ok;
+    final days = daysUntilFinish(reference);
+    if (days <= 0 || remainingGrams(reference) <= 0) {
+      return FoodSupplyStatus.critical;
+    }
+    if (days <= 7) return FoodSupplyStatus.warning;
+    return FoodSupplyStatus.ok;
   }
+
+  /// Son 7 gün ve altında uyarı bandı.
+  bool get isRunningLow => status() != FoodSupplyStatus.ok;
 
   FoodTrackingRecord copyWith({
     int? id,

@@ -6,6 +6,14 @@ import '../../models/food_tracking_record.dart';
 import '../../utils/turkish_date_format.dart';
 import '../health/health_ui.dart';
 
+Color _foodStatusColor(FoodSupplyStatus status) {
+  return switch (status) {
+    FoodSupplyStatus.ok => HealthUi.accentPink,
+    FoodSupplyStatus.warning => const Color(0xFFE8A04C),
+    FoodSupplyStatus.critical => const Color(0xFFD64545),
+  };
+}
+
 class AddFoodTrackingSheet extends StatefulWidget {
   const AddFoodTrackingSheet({super.key});
 
@@ -513,6 +521,8 @@ class _FoodTrackingBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final remaining = record.remainingGrams();
     final percent = record.remainingPercent();
+    final status = record.status();
+    final accent = _foodStatusColor(status);
 
     return Column(
       children: [
@@ -530,6 +540,7 @@ class _FoodTrackingBody extends StatelessWidget {
             _FoodRing(
               remainingGrams: remaining,
               progress: percent,
+              accentColor: accent,
             ),
             Expanded(
               child: _SideInfo(
@@ -544,7 +555,7 @@ class _FoodTrackingBody extends StatelessWidget {
         ),
         if (record.isRunningLow) ...[
           const SizedBox(height: 20),
-          const _LowFoodBanner(),
+          _LowFoodBanner(status: status),
         ],
       ],
     );
@@ -622,10 +633,12 @@ class _FoodRing extends StatelessWidget {
   const _FoodRing({
     required this.remainingGrams,
     required this.progress,
+    required this.accentColor,
   });
 
   final double remainingGrams;
   final double progress;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -637,7 +650,10 @@ class _FoodRing extends StatelessWidget {
       width: 130,
       height: 130,
       child: CustomPaint(
-        painter: _RingPainter(progress: progress.clamp(0.0, 1.0)),
+        painter: _RingPainter(
+          progress: progress.clamp(0.0, 1.0),
+          accentColor: accentColor,
+        ),
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -647,10 +663,10 @@ class _FoodRing extends StatelessWidget {
                 Text(
                   gramsText,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: HealthUi.titleInk,
+                    color: accentColor,
                     height: 1.1,
                   ),
                 ),
@@ -674,12 +690,13 @@ class _FoodRing extends StatelessWidget {
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter({required this.progress});
+  _RingPainter({
+    required this.progress,
+    required this.accentColor,
+  });
 
   final double progress;
-
-  static const _trackColor = Color(0xFFF3D4D8);
-  static const _fillColor = Color(0xFFD47A85);
+  final Color accentColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -688,13 +705,13 @@ class _RingPainter extends CustomPainter {
     const stroke = 10.0;
 
     final trackPaint = Paint()
-      ..color = _trackColor
+      ..color = accentColor.withValues(alpha: 0.15)
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
 
     final fillPaint = Paint()
-      ..color = _fillColor
+      ..color = accentColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
@@ -714,28 +731,37 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RingPainter oldDelegate) {
-    return oldDelegate.progress != progress;
+    return oldDelegate.progress != progress ||
+        oldDelegate.accentColor != accentColor;
   }
 }
 
 class _LowFoodBanner extends StatelessWidget {
-  const _LowFoodBanner();
+  const _LowFoodBanner({required this.status});
+
+  final FoodSupplyStatus status;
 
   @override
   Widget build(BuildContext context) {
+    final accent = _foodStatusColor(status);
+    final message = status == FoodSupplyStatus.critical
+        ? 'Mama Bitti - Yeni Paket Alın!'
+        : 'Mama Azalıyor - Yeni Paket Alın!';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBE8EA),
+        color: accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
           Container(
             width: 22,
             height: 22,
-            decoration: const BoxDecoration(
-              color: Color(0xFFD64545),
+            decoration: BoxDecoration(
+              color: accent,
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -745,10 +771,10 @@ class _LowFoodBanner extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Mama Azalıyor - Yeni Paket Alın!',
-              style: TextStyle(
+              message,
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: HealthUi.titleInk,
