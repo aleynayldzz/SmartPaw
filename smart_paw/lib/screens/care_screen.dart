@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../models/food_tracking_record.dart';
+import '../models/litter_tracking_record.dart';
 import '../services/food_tracking_local_store.dart';
+import '../services/litter_tracking_local_store.dart';
+import '../widgets/care/add_litter_tracking_sheet.dart';
 import '../widgets/care/food_tracking_card.dart';
+import '../widgets/care/litter_tracking_card.dart';
 import '../widgets/health/health_ui.dart';
 
-/// Bakım sekmesi — yemek takibi.
+/// Bakım sekmesi — mama ve kum takibi.
 class CareScreen extends StatefulWidget {
   const CareScreen({super.key, required this.onBackToHome});
 
@@ -17,8 +21,12 @@ class CareScreen extends StatefulWidget {
 
 class CareScreenState extends State<CareScreen>
     with AutomaticKeepAliveClientMixin {
-  final _store = FoodTrackingLocalStore.instance;
-  FoodTrackingRecord? _record;
+  final _foodStore = FoodTrackingLocalStore.instance;
+  final _litterStore = LitterTrackingLocalStore.instance;
+
+  FoodTrackingRecord? _foodRecord;
+  LitterTrackingRecord? _litterRecord;
+  bool _litterSaving = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -26,15 +34,26 @@ class CareScreenState extends State<CareScreen>
   @override
   void initState() {
     super.initState();
-    _record = _store.current;
+    _foodRecord = _foodStore.current;
+    _litterRecord = _litterStore.current;
   }
 
   void _reload() {
-    setState(() => _record = _store.current);
+    setState(() {
+      _foodRecord = _foodStore.current;
+      _litterRecord = _litterStore.current;
+    });
   }
 
-  Future<void> _openSheet() async {
-    if (_record != null) return;
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _openFoodSheet() async {
+    if (_foodRecord != null) return;
 
     final draft = await showModalBottomSheet<FoodTrackingDraft>(
       context: context,
@@ -43,19 +62,95 @@ class CareScreenState extends State<CareScreen>
       builder: (_) => const AddFoodTrackingSheet(),
     );
     if (draft == null || !mounted) return;
-    await _store.save(draft);
+    await _foodStore.save(draft);
     if (!mounted) return;
     _reload();
   }
 
-  Future<void> _confirmDelete() async {
-    final yes = await showDialog<bool>(
+  Future<void> _confirmDeleteFood() async {
+    final yes = await _confirmDelete(
+      'Mama takibi kaydını silmek istediğinize emin misiniz?',
+    );
+    if (yes != true || !mounted) return;
+    await _foodStore.delete();
+    if (!mounted) return;
+    _reload();
+  }
+
+  Future<void> _openLitterSheet() async {
+    if (_litterRecord != null) return;
+
+    final draft = await showModalBottomSheet<LitterTrackingDraft>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const AddLitterTrackingSheet(),
+    );
+    if (draft == null || !mounted) return;
+    await _litterStore.save(draft);
+    if (!mounted) return;
+    _reload();
+    _snack('Kum takibi kaydedildi.');
+  }
+
+  Future<void> _saveLitterCleaning() async {
+    if (_litterRecord == null || _litterSaving) return;
+
+    final remaining = _litterRecord!.daysRemaining();
+    if (remaining > 0) {
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Erken temizlik'),
+          content: const Text(
+            'Kumu planlanan zamandan erken temizlediğinizi onaylıyor musunuz?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('İptal'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Onayla'),
+            ),
+          ],
+        ),
+      );
+      if (yes != true || !mounted) return;
+    }
+
+    setState(() => _litterSaving = true);
+    try {
+      await _litterStore.saveCleaning();
+      if (!mounted) return;
+      _reload();
+      _snack('Temizlik kaydedildi.');
+    } catch (_) {
+      if (!mounted) return;
+      _snack('Temizlik kaydedilemedi.');
+    } finally {
+      if (mounted) setState(() => _litterSaving = false);
+    }
+  }
+
+  Future<void> _confirmDeleteLitter() async {
+    final yes = await _confirmDelete(
+      'Kum takibi kaydını silmek istediğinize emin misiniz?',
+    );
+    if (yes != true || !mounted) return;
+    await _litterStore.delete();
+    if (!mounted) return;
+    _reload();
+    _snack('Kum takibi silindi.');
+  }
+
+  Future<bool?> _confirmDelete(String message) {
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Kaydı sil'),
-        content: const Text(
-          'Mama takibi kaydını silmek istediğinize emin misiniz?',
-        ),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -71,10 +166,6 @@ class CareScreenState extends State<CareScreen>
         ],
       ),
     );
-    if (yes != true || !mounted) return;
-    await _store.delete();
-    if (!mounted) return;
-    _reload();
   }
 
   @override
@@ -112,9 +203,17 @@ class CareScreenState extends State<CareScreen>
           ),
           const SizedBox(height: 8),
           FoodTrackingCard(
-            record: _record,
-            onAdd: _openSheet,
-            onDelete: _record == null ? () {} : _confirmDelete,
+            record: _foodRecord,
+            onAdd: _openFoodSheet,
+            onDelete: _foodRecord == null ? () {} : _confirmDeleteFood,
+          ),
+          const SizedBox(height: 16),
+          LitterTrackingCard(
+            record: _litterRecord,
+            onAdd: _openLitterSheet,
+            onDelete: _litterRecord == null ? () {} : _confirmDeleteLitter,
+            onSaveCleaning: _saveLitterCleaning,
+            isSavingCleaning: _litterSaving,
           ),
         ],
       ),

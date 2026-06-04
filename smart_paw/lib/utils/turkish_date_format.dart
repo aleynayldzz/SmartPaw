@@ -37,6 +37,11 @@ String formatTurkishDateShort(DateTime date) {
   return '${date.day} ${_turkishMonthsShort[date.month - 1]} ${date.year}';
 }
 
+/// Gün + ay — örn. "15 Haziran"
+String formatTurkishDayMonth(DateTime date) {
+  return '${date.day} ${_turkishMonths[date.month - 1]}';
+}
+
 String formatTurkishDateTime(DateTime dateTime) {
   final h = dateTime.hour.toString().padLeft(2, '0');
   final m = dateTime.minute.toString().padLeft(2, '0');
