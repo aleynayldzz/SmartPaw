@@ -59,11 +59,17 @@ class FoodTrackingRecord {
     if (days <= 0 || remainingGrams(reference) <= 0) {
       return FoodSupplyStatus.critical;
     }
-    if (days <= 7) return FoodSupplyStatus.warning;
+    if (days >= 1 && days <= 7) return FoodSupplyStatus.warning;
     return FoodSupplyStatus.ok;
   }
 
-  /// Son 7 gün ve altında uyarı bandı.
+  /// Yeni paket (+) — yalnızca 0 gün kaldığında veya gecikmede.
+  bool canAddNewPackage([DateTime? reference]) {
+    if (dailyFoodGrams <= 0) return false;
+    return daysUntilFinish(reference) <= 0;
+  }
+
+  /// Son 7 gün ve altında uyarı bandı (1–7 gün; 0 ve gecikme ayrı).
   bool get isRunningLow => status() != FoodSupplyStatus.ok;
 
   FoodTrackingRecord copyWith({

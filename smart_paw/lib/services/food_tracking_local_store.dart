@@ -25,6 +25,12 @@ class FoodTrackingLocalStore {
     return _record!;
   }
 
+  /// Biten paketin yerine yeni paket — eski kayıt silinir, sıfırdan hesaplanır.
+  Future<FoodTrackingRecord> replaceWithNewPackage(FoodTrackingDraft draft) async {
+    _record = null;
+    return save(draft);
+  }
+
   Future<void> delete() async {
     _record = null;
   }

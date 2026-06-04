@@ -15,7 +15,10 @@ Color _foodStatusColor(FoodSupplyStatus status) {
 }
 
 class AddFoodTrackingSheet extends StatefulWidget {
-  const AddFoodTrackingSheet({super.key});
+  const AddFoodTrackingSheet({super.key, this.replacingFinishedPackage = false});
+
+  /// Biten paket sonrası yeni paket girişi.
+  final bool replacingFinishedPackage;
 
   @override
   State<AddFoodTrackingSheet> createState() => _AddFoodTrackingSheetState();
@@ -28,6 +31,11 @@ class _AddFoodTrackingSheetState extends State<AddFoodTrackingSheet> {
   DateTime? _openingDate;
   String? _validationMessage;
   Timer? _validationTimer;
+
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
 
   @override
   void dispose() {
@@ -46,16 +54,20 @@ class _AddFoodTrackingSheetState extends State<AddFoodTrackingSheet> {
   }
 
   Future<void> _pickOpeningDate() async {
-    final now = DateTime.now();
+    final today = _today;
+    final replacing = widget.replacingFinishedPackage;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: _openingDate ?? now,
-      firstDate: DateTime(now.year - 2),
-      lastDate: now,
+      initialDate: _openingDate ?? today,
+      firstDate: replacing ? today : DateTime(today.year - 2),
+      lastDate: replacing ? DateTime(today.year + 2) : today,
       locale: const Locale('tr'),
     );
     if (picked == null || !mounted) return;
-    setState(() => _openingDate = picked);
+    setState(
+      () => _openingDate = DateTime(picked.year, picked.month, picked.day),
+    );
   }
 
   void _save() {
@@ -131,9 +143,11 @@ class _AddFoodTrackingSheetState extends State<AddFoodTrackingSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Mama Takibi Ekle',
-                            style: TextStyle(
+                          Text(
+                            widget.replacingFinishedPackage
+                                ? 'Yeni Mama Paketi'
+                                : 'Mama Takibi Ekle',
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
                               color: HealthUi.titleInk,
@@ -141,7 +155,9 @@ class _AddFoodTrackingSheetState extends State<AddFoodTrackingSheet> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Paket açılış tarihi, günlük tüketim ve paket ağırlığını girin.',
+                            widget.replacingFinishedPackage
+                                ? 'Biten paketin yerine yeni paket bilgilerini girin.'
+                                : 'Paket açılış tarihi, günlük tüketim ve paket ağırlığını girin.',
                             style: TextStyle(
                               fontSize: 13,
                               height: 1.35,
@@ -187,6 +203,17 @@ class _AddFoodTrackingSheetState extends State<AddFoodTrackingSheet> {
                     ),
                   ),
                 ),
+                if (widget.replacingFinishedPackage) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Geçmiş tarih seçilemez; bugün veya sonraki günlerden birini seçin.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: HealthUi.muted.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 _LabeledField(
                   label: 'Günlük tüketim (gram)',
@@ -335,13 +362,18 @@ class FoodTrackingCard extends StatelessWidget {
       );
     }
 
+    final showNewPackageButton = record!.canAddNewPackage();
+
     return _SwipeToDeleteCard(
       onDelete: onDelete,
       child: _FoodCardShell(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _FoodCardHeader(showAddButton: false),
+            _FoodCardHeader(
+              showAddButton: showNewPackageButton,
+              onAdd: onAdd,
+            ),
             const SizedBox(height: 20),
             _FoodTrackingBody(record: record!),
           ],

@@ -53,18 +53,29 @@ class CareScreenState extends State<CareScreen>
   }
 
   Future<void> _openFoodSheet() async {
-    if (_foodRecord != null) return;
+    final replacing = _foodRecord?.canAddNewPackage() ?? false;
+    if (_foodRecord != null && !replacing) return;
 
     final draft = await showModalBottomSheet<FoodTrackingDraft>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const AddFoodTrackingSheet(),
+      builder: (_) => AddFoodTrackingSheet(
+        replacingFinishedPackage: replacing,
+      ),
     );
     if (draft == null || !mounted) return;
-    await _foodStore.save(draft);
-    if (!mounted) return;
-    _reload();
+
+    if (replacing) {
+      await _foodStore.replaceWithNewPackage(draft);
+      if (!mounted) return;
+      _reload();
+      _snack('Yeni mama paketi kaydedildi.');
+    } else {
+      await _foodStore.save(draft);
+      if (!mounted) return;
+      _reload();
+    }
   }
 
   Future<void> _confirmDeleteFood() async {
