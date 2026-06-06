@@ -1,4 +1,5 @@
 const { pool, dbNotConfiguredPayload } = require("../db");
+const { toCalendarDateString } = require("../utils/date");
 const { isNonEmptyString } = require("../utils/validators");
 
 const DAILY_GRAMS_MIN = 1;
@@ -172,10 +173,11 @@ function computeDerivedFields(row, referenceDateStr = formatDateOnly(todayDateOn
 
 function mapFoodTrackingRow(row) {
   if (!row) return null;
-  const derived = computeDerivedFields(row);
+  const openingDate = toCalendarDateString(row.opening_date);
+  const derived = computeDerivedFields({ ...row, opening_date: openingDate });
   return {
     food_id: row.food_id,
-    opening_date: row.opening_date,
+    opening_date: openingDate,
     daily_food_grams: Number(row.daily_food_grams),
     package_weight_kg: Number(row.package_weight_kg),
     remaining_grams: derived.remaining_grams,
@@ -193,7 +195,7 @@ function mapFoodTrackingRow(row) {
 const FOOD_SELECT = `
   SELECT
     food_id,
-    opening_date,
+    to_char(opening_date, 'YYYY-MM-DD') AS opening_date,
     daily_food_grams,
     package_weight_kg,
     created_at,
@@ -336,40 +338,19 @@ async function createForUser(userId, body) {
     };
   }
 
-  const today = formatDateOnly(todayDateOnly());
-  const derived = computeDerivedFields(
-    {
-      package_weight_kg: packageWeightKg,
-      daily_food_grams: dailyFoodGrams,
-      opening_date: openingDate
-    },
-    today
-  );
-
   const insert = await pool.query(
     `
     INSERT INTO food_tracking (
       user_id,
       opening_date,
       daily_food_grams,
-      package_weight_kg,
-      remaining_weight_kg,
-      last_updated,
-      estimated_finish_date
+      package_weight_kg
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    VALUES ($1, $2, $3, $4)
     RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
               created_at, updated_at
     `,
-    [
-      userId,
-      openingDate,
-      dailyFoodGrams,
-      packageWeightKg,
-      derived.remaining_weight_kg,
-      today,
-      derived.estimated_finish_date
-    ]
+    [userId, openingDate, dailyFoodGrams, packageWeightKg]
   );
 
   return {
@@ -403,15 +384,6 @@ async function updateForUser(userId, foodIdRaw, body) {
   if (parsed.error) return parsed.error;
 
   const { dailyFoodGrams, packageWeightKg, openingDate } = parsed.value;
-  const today = formatDateOnly(todayDateOnly());
-  const derived = computeDerivedFields(
-    {
-      package_weight_kg: packageWeightKg,
-      daily_food_grams: dailyFoodGrams,
-      opening_date: openingDate
-    },
-    today
-  );
 
   const updated = await pool.query(
     `
@@ -420,24 +392,12 @@ async function updateForUser(userId, foodIdRaw, body) {
       opening_date = $1,
       daily_food_grams = $2,
       package_weight_kg = $3,
-      remaining_weight_kg = $4,
-      last_updated = $5,
-      estimated_finish_date = $6,
       updated_at = NOW()
-    WHERE food_id = $7 AND user_id = $8
+    WHERE food_id = $4 AND user_id = $5
     RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
               created_at, updated_at
     `,
-    [
-      openingDate,
-      dailyFoodGrams,
-      packageWeightKg,
-      derived.remaining_weight_kg,
-      today,
-      derived.estimated_finish_date,
-      foodId,
-      userId
-    ]
+    [openingDate, dailyFoodGrams, packageWeightKg, foodId, userId]
   );
 
   return {
@@ -467,34 +427,10 @@ async function replacePackageForUser(userId, foodIdRaw, body) {
     };
   }
 
-  const today = formatDateOnly(todayDateOnly());
-  if (!canAddNewPackage(
-    Number(current.package_weight_kg),
-    Number(current.daily_food_grams),
-    current.opening_date,
-    today
-  )) {
-    return {
-      statusCode: 400,
-      json: {
-        ok: false,
-        message: "A new package can only be added when the current supply is depleted."
-      }
-    };
-  }
-
   const parsed = parseCreateOrUpdateBody(body, { isReplace: true });
   if (parsed.error) return parsed.error;
 
   const { dailyFoodGrams, packageWeightKg, openingDate } = parsed.value;
-  const derived = computeDerivedFields(
-    {
-      package_weight_kg: packageWeightKg,
-      daily_food_grams: dailyFoodGrams,
-      opening_date: openingDate
-    },
-    today
-  );
 
   const updated = await pool.query(
     `
@@ -503,24 +439,12 @@ async function replacePackageForUser(userId, foodIdRaw, body) {
       opening_date = $1,
       daily_food_grams = $2,
       package_weight_kg = $3,
-      remaining_weight_kg = $4,
-      last_updated = $5,
-      estimated_finish_date = $6,
       updated_at = NOW()
-    WHERE food_id = $7 AND user_id = $8
+    WHERE food_id = $4 AND user_id = $5
     RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
               created_at, updated_at
     `,
-    [
-      openingDate,
-      dailyFoodGrams,
-      packageWeightKg,
-      derived.remaining_weight_kg,
-      today,
-      derived.estimated_finish_date,
-      foodId,
-      userId
-    ]
+    [openingDate, dailyFoodGrams, packageWeightKg, foodId, userId]
   );
 
   return {
