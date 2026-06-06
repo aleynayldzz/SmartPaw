@@ -14,9 +14,12 @@ const _kAccentPink = Color(0xFFD88A92);
 const _kFieldBorder = Color(0xFF5C5C5C);
 
 class AddCatScreen extends StatefulWidget {
-  const AddCatScreen({super.key, this.initial});
+  const AddCatScreen({super.key, this.initial, this.knownCats});
 
   final CatFormInitial? initial;
+
+  /// Kedilerim ekranından gelen güncel liste; isim çakışması kontrolü için.
+  final List<Map<String, dynamic>>? knownCats;
 
   @override
   State<AddCatScreen> createState() => _AddCatScreenState();
@@ -588,34 +591,101 @@ class _AddCatScreenState extends State<AddCatScreen> {
     return true;
   }
 
+  Future<bool> _confirmDuplicateNameIfNeeded() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return true;
+
+    List<Map<String, dynamic>> cats = widget.knownCats ?? const [];
+    if (cats.isEmpty) {
+      try {
+        cats = await CatApiService.fetchMyCats();
+      } on CatApiException catch (e) {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        return false;
+      }
+    }
+
+    final excludeCatId = _isEditing ? widget.initial!.catId : null;
+    final hasDuplicate = CatApiService.hasDuplicateCatName(
+      cats,
+      name,
+      excludeCatId: excludeCatId,
+    );
+
+    if (!hasDuplicate) return true;
+    if (!mounted) return false;
+
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bu isim zaten kayıtlı'),
+        content: Text(
+          _isEditing
+              ? '«$name» adında başka bir kedi profiliniz bulunuyor. '
+                  'Bu kediyi aynı isimle kaydetmeye devam etmek istiyor musunuz?'
+              : '«$name» adında bir kedi profiliniz zaten var. '
+                  'Aynı isimle ikinci bir profil oluşturmak istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Evet, kaydet'),
+          ),
+        ],
+      ),
+    );
+
+    return proceed == true;
+  }
+
+  Future<Map<String, dynamic>> _persistCat() {
+    final payload = (
+      name: _nameCtrl.text.trim(),
+      breedId: _breed!.breedId!,
+      birthDateIso: _birthIso(_birth!),
+      isFemale: _isFemale!,
+      weightKg: _weightKg,
+      isNeutered: _isNeutered!,
+    );
+
+    if (_isEditing) {
+      return CatApiService.updateCat(
+        catId: widget.initial!.catId,
+        name: payload.name,
+        breedId: payload.breedId,
+        birthDateIso: payload.birthDateIso,
+        isFemale: payload.isFemale,
+        weightKg: payload.weightKg,
+        isNeutered: payload.isNeutered,
+      );
+    }
+
+    return CatApiService.createCat(
+      name: payload.name,
+      breedId: payload.breedId,
+      birthDateIso: payload.birthDateIso,
+      isFemale: payload.isFemale,
+      weightKg: payload.weightKg,
+      isNeutered: payload.isNeutered,
+    );
+  }
+
   Future<void> _save() async {
     if (!_validate()) return;
+
+    final canProceed = await _confirmDuplicateNameIfNeeded();
+    if (!canProceed || !mounted) return;
+
     setState(() => _saving = true);
     try {
-      if (_isEditing) {
-        final map = await CatApiService.updateCat(
-          catId: widget.initial!.catId,
-          name: _nameCtrl.text.trim(),
-          breedId: _breed!.breedId!,
-          birthDateIso: _birthIso(_birth!),
-          isFemale: _isFemale!,
-          weightKg: _weightKg,
-          isNeutered: _isNeutered!,
-        );
-        if (!mounted) return;
-        Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
-      } else {
-        final map = await CatApiService.createCat(
-          name: _nameCtrl.text.trim(),
-          breedId: _breed!.breedId!,
-          birthDateIso: _birthIso(_birth!),
-          isFemale: _isFemale!,
-          weightKg: _weightKg,
-          isNeutered: _isNeutered!,
-        );
-        if (!mounted) return;
-        Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
-      }
+      final map = await _persistCat();
+      if (!mounted) return;
+      Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
     } on CatApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

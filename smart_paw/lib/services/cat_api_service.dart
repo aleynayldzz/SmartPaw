@@ -20,6 +20,55 @@ class CatApiException implements Exception {
 class CatApiService {
   CatApiService._();
 
+  static int? parseCatId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString().trim());
+  }
+
+  /// İsim karşılaştırması: boşluk, büyük/küçük harf ve Türkçe karakter farkını yok sayar.
+  static String normalizeCatName(String raw) {
+    final collapsed = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final buf = StringBuffer();
+    for (final rune in collapsed.runes) {
+      var ch = String.fromCharCode(rune);
+      if (ch == 'İ' || ch == 'I') {
+        ch = 'i';
+      } else {
+        ch = ch.toLowerCase();
+      }
+      ch = switch (ch) {
+        'ı' => 'i',
+        'ğ' => 'g',
+        'ü' => 'u',
+        'ş' => 's',
+        'ö' => 'o',
+        'ç' => 'c',
+        _ => ch,
+      };
+      buf.write(ch);
+    }
+    return buf.toString();
+  }
+
+  static bool hasDuplicateCatName(
+    List<Map<String, dynamic>> cats,
+    String name, {
+    int? excludeCatId,
+  }) {
+    final target = normalizeCatName(name);
+    if (target.isEmpty) return false;
+
+    for (final cat in cats) {
+      final id = parseCatId(cat['cat_id']);
+      if (excludeCatId != null && id == excludeCatId) continue;
+      final other = normalizeCatName(cat['name']?.toString() ?? '');
+      if (other == target) return true;
+    }
+    return false;
+  }
+
   static Map<String, String> _headers({bool auth = false}) {
     final t = auth ? AuthSession.accessToken : null;
     return {
@@ -218,9 +267,7 @@ class CatApiService {
   }
 
   static CatFormInitial catToFormInitial(Map<String, dynamic> c) {
-    final cid = (c['cat_id'] as num?)?.toInt() ??
-        int.tryParse(c['cat_id']?.toString() ?? '') ??
-        0;
+    final cid = parseCatId(c['cat_id']) ?? 0;
     final bid = (c['breed_id'] as num?)?.toInt() ??
         int.tryParse(c['breed_id']?.toString() ?? '') ??
         0;

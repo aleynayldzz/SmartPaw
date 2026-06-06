@@ -78,7 +78,7 @@ class _MyCatsScreenState extends State<MyCatsScreen> {
 
   Future<void> _openAdd() async {
     final result = await Navigator.of(context).push<AddCatNavResult?>(
-      MaterialPageRoute(builder: (_) => const AddCatScreen()),
+      MaterialPageRoute(builder: (_) => AddCatScreen(knownCats: _cats)),
     );
     if (!mounted) return;
     if (result?.draft != null || result?.deletedCatId != null) {
@@ -100,7 +100,7 @@ class _MyCatsScreenState extends State<MyCatsScreen> {
   Future<void> _openEdit(Map<String, dynamic> cat) async {
     final ini = CatApiService.catToFormInitial(cat);
     final result = await Navigator.of(context).push<AddCatNavResult?>(
-      MaterialPageRoute(builder: (_) => AddCatScreen(initial: ini)),
+      MaterialPageRoute(builder: (_) => AddCatScreen(initial: ini, knownCats: _cats)),
     );
     if (!mounted) return;
     if (result?.draft != null || result?.deletedCatId != null) {

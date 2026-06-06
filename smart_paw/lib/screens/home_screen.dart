@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../models/cat_profile.dart';
 import '../services/auth_api_service.dart';
 import '../services/auth_session.dart';
 import '../services/daily_routine_api_service.dart';
@@ -94,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadDailyRoutine();
+      _healthKey.currentState?.reloadFromApi(silent: true);
       _careKey.currentState?.reloadFromApi(silent: true);
     }
   }
@@ -173,10 +175,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _openQuickAddCat() {
-    Navigator.of(
-      context,
-    ).push<void>(MaterialPageRoute<void>(builder: (_) => const AddCatScreen()));
+  Future<void> _openQuickAddCat() async {
+    final result = await Navigator.of(context).push<AddCatNavResult?>(
+      MaterialPageRoute(builder: (_) => const AddCatScreen()),
+    );
+    if (!mounted) return;
+    if (result?.draft != null || result?.deletedCatId != null) {
+      _healthKey.currentState?.reloadFromApi(silent: true);
+      _analysisKey.currentState?.refresh();
+    }
   }
 
   void _openQuickAddVaccine() {
@@ -206,10 +213,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _openMyCats() {
-    Navigator.of(
-      context,
-    ).push<void>(MaterialPageRoute<void>(builder: (_) => const MyCatsScreen()));
+  Future<void> _openMyCats() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const MyCatsScreen()),
+    );
+    if (!mounted) return;
+    _healthKey.currentState?.reloadFromApi(silent: true);
+    _analysisKey.currentState?.refresh();
   }
 
   @override
@@ -240,6 +250,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         onSelect: (i) {
           if (i == 0 && _navIndex != 0) {
             _loadDailyRoutine();
+          }
+          if (i == _healthTabIndex) {
+            _healthKey.currentState?.reloadFromApi(silent: true);
           }
           if (i == _careTabIndex) {
             _careKey.currentState?.reloadFromApi(silent: true);

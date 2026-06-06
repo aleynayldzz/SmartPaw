@@ -23,7 +23,7 @@ class HealthScreen extends StatefulWidget {
 }
 
 class HealthScreenState extends State<HealthScreen>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   /// Ana sayfa kısayolundan aşı ekleme formunu açar.
   Future<void> openAddVaccine() => _openAddVaccine();
 
@@ -54,11 +54,37 @@ class HealthScreenState extends State<HealthScreen>
   @override
   void initState() {
     super.initState();
-    _loadCatOptions();
-    _loadVaccines();
-    _loadVetVisits();
-    _loadMedications();
+    WidgetsBinding.instance.addObserver(this);
+    reloadFromApi();
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      reloadFromApi(silent: true);
+    }
+  }
+
+  /// Kediler ve sağlık kayıtları — sekme dönüşü ve kedi ekleme/silme sonrası yenilenir.
+  Future<void> reloadFromApi({bool silent = false}) async {
+    await _loadCatOptions();
+    await Future.wait([
+      _loadVaccines(silent: silent),
+      _loadVetVisits(silent: silent),
+      _loadMedications(silent: silent),
+    ]);
+  }
+
+  Set<int> get _activeCatIds => _catOptions.map((c) => c.catId).toSet();
+
+  bool _isActiveCat(int? catId) =>
+      catId != null && _activeCatIds.contains(catId);
 
   Future<void> _loadCatOptions() async {
     try {
@@ -66,12 +92,15 @@ class HealthScreenState extends State<HealthScreen>
       if (!mounted) return;
       setState(() {
         _catOptions = cats
-            .map(
-              (c) => VaccineCatOption(
-                catId: (c['cat_id'] as num).toInt(),
+            .map((c) {
+              final id = CatApiService.parseCatId(c['cat_id']);
+              if (id == null) return null;
+              return VaccineCatOption(
+                catId: id,
                 name: c['name']?.toString() ?? 'Kedi',
-              ),
-            )
+              );
+            })
+            .whereType<VaccineCatOption>()
             .toList(growable: false);
       });
     } on CatApiException catch (_) {
@@ -83,17 +112,14 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  Future<void> _loadVaccines() async {
-    if (mounted) {
+  Future<void> _loadVaccines({bool silent = false}) async {
+    if (!silent && mounted) {
       setState(() {
         _vaccinesLoading = true;
         _vaccinesError = null;
       });
     }
     try {
-      if (_catOptions.isEmpty) {
-        await _loadCatOptions();
-      }
       final vaccines = await VaccinationApiService.fetchAll();
       if (!mounted) return;
       setState(() {
@@ -117,8 +143,8 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  Future<void> _loadVetVisits() async {
-    if (mounted) {
+  Future<void> _loadVetVisits({bool silent = false}) async {
+    if (!silent && mounted) {
       setState(() {
         _vetVisitsLoading = true;
         _vetVisitsError = null;
@@ -302,8 +328,8 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  Future<void> _loadMedications() async {
-    if (mounted) {
+  Future<void> _loadMedications({bool silent = false}) async {
+    if (!silent && mounted) {
       setState(() {
         _medicationsLoading = true;
         _medicationsError = null;
@@ -415,13 +441,14 @@ class HealthScreenState extends State<HealthScreen>
   }
 
   List<VaccineRecord> get _sortedVaccines {
-    final copy = List<VaccineRecord>.from(_vaccines);
+    final copy = _vaccines.where((v) => _isActiveCat(v.catId)).toList();
     copy.sort((a, b) => b.vaccinationDate.compareTo(a.vaccinationDate));
     return copy;
   }
 
   List<VaccineRecord> get _upcomingVaccines {
-    final copy = _vaccines.where((v) => v.isUpcoming).toList();
+    final copy =
+        _vaccines.where((v) => _isActiveCat(v.catId) && v.isUpcoming).toList();
     copy.sort(
       (a, b) =>
           a.nextVaccinationDate!.compareTo(b.nextVaccinationDate!),
@@ -430,13 +457,16 @@ class HealthScreenState extends State<HealthScreen>
   }
 
   List<VetAppointmentRecord> get _sortedVetAppointments {
-    final copy = List<VetAppointmentRecord>.from(_vetAppointments);
+    final copy =
+        _vetAppointments.where((v) => _isActiveCat(v.catId)).toList();
     copy.sort((a, b) => b.visitDate.compareTo(a.visitDate));
     return copy;
   }
 
   List<VetAppointmentRecord> get _upcomingVetVisits {
-    final copy = _vetAppointments.where((v) => v.isUpcoming).toList();
+    final copy = _vetAppointments
+        .where((v) => _isActiveCat(v.catId) && v.isUpcoming)
+        .toList();
     copy.sort(
       (a, b) => a.nextVisitDate!.compareTo(b.nextVisitDate!),
     );
@@ -444,7 +474,7 @@ class HealthScreenState extends State<HealthScreen>
   }
 
   List<MedicationRecord> get _sortedMedications {
-    final copy = List<MedicationRecord>.from(_medications);
+    final copy = _medications.where((m) => _isActiveCat(m.catId)).toList();
     copy.sort((a, b) => b.startDate.compareTo(a.startDate));
     return copy;
   }
