@@ -41,9 +41,9 @@ class VaccinationApiService {
     return '${d.year}-$m-$day';
   }
 
-  static Future<List<VaccineRecord>> fetchAll() async {
+  static Future<List<VaccineRecord>> fetchAll({int? catId}) async {
     final res = await http.get(
-      ApiConfig.vaccinationsUri(),
+      ApiConfig.vaccinationsUri(catId: catId),
       headers: _headers(),
     );
     final body = _decodeBody(res.body);

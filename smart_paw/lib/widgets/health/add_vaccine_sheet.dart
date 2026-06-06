@@ -24,11 +24,15 @@ class AddVaccineSheet extends StatefulWidget {
     required this.cats,
     this.initial,
     this.mode = VaccineSheetMode.create,
+    this.defaultCatId,
   });
 
   final List<VaccineCatOption> cats;
   final VaccineRecord? initial;
   final VaccineSheetMode mode;
+
+  /// Oluşturma modunda önceden seçili kedi (aşı filtresinden gelir).
+  final int? defaultCatId;
 
   bool get readOnly => mode == VaccineSheetMode.view;
 
@@ -88,6 +92,9 @@ class _AddVaccineSheetState extends State<AddVaccineSheet> {
       _reminderEnabled = ini.reminderEnabled;
       _notesCtrl.text = ini.notes;
       _syncReminderForNextDate();
+    } else if (widget.defaultCatId != null &&
+        widget.cats.any((c) => c.catId == widget.defaultCatId)) {
+      _selectedCatId = widget.defaultCatId;
     }
   }
 

@@ -31,7 +31,11 @@ class ApiConfig {
 
   static Uri catUri(int catId) => Uri.parse('$baseUrl/api/cats/$catId');
 
-  static Uri vaccinationsUri() => Uri.parse('$baseUrl/api/vaccinations');
+  static Uri vaccinationsUri({int? catId}) {
+    final base = '$baseUrl/api/vaccinations';
+    if (catId == null) return Uri.parse(base);
+    return Uri.parse(base).replace(queryParameters: {'cat_id': '$catId'});
+  }
 
   static Uri vaccinationUri(int vaccinationId) =>
       Uri.parse('$baseUrl/api/vaccinations/$vaccinationId');

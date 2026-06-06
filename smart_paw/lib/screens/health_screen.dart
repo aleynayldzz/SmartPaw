@@ -39,6 +39,7 @@ class HealthScreenState extends State<HealthScreen>
 
   List<VaccineRecord> _vaccines = [];
   List<VaccineCatOption> _catOptions = [];
+  int? _vaccineFilterCatId;
   bool _vaccinesLoading = true;
   String? _vaccinesError;
   List<VetAppointmentRecord> _vetAppointments = [];
@@ -90,18 +91,24 @@ class HealthScreenState extends State<HealthScreen>
     try {
       final cats = await CatApiService.fetchMyCats();
       if (!mounted) return;
+      final options = cats
+          .map((c) {
+            final id = CatApiService.parseCatId(c['cat_id']);
+            if (id == null) return null;
+            return VaccineCatOption(
+              catId: id,
+              name: c['name']?.toString() ?? 'Kedi',
+            );
+          })
+          .whereType<VaccineCatOption>()
+          .toList(growable: false);
+
       setState(() {
-        _catOptions = cats
-            .map((c) {
-              final id = CatApiService.parseCatId(c['cat_id']);
-              if (id == null) return null;
-              return VaccineCatOption(
-                catId: id,
-                name: c['name']?.toString() ?? 'Kedi',
-              );
-            })
-            .whereType<VaccineCatOption>()
-            .toList(growable: false);
+        _catOptions = options;
+        if (_vaccineFilterCatId != null &&
+            !options.any((c) => c.catId == _vaccineFilterCatId)) {
+          _vaccineFilterCatId = null;
+        }
       });
     } on CatApiException catch (_) {
       if (!mounted) return;
@@ -120,7 +127,8 @@ class HealthScreenState extends State<HealthScreen>
       });
     }
     try {
-      final vaccines = await VaccinationApiService.fetchAll();
+      final vaccines =
+          await VaccinationApiService.fetchAll(catId: _vaccineFilterCatId);
       if (!mounted) return;
       setState(() {
         _vaccines = vaccines;
@@ -390,6 +398,8 @@ class HealthScreenState extends State<HealthScreen>
         cats: _catOptions,
         initial: existing,
         mode: mode,
+        defaultCatId:
+            mode == VaccineSheetMode.create ? _vaccineFilterCatId : null,
       ),
     );
     if (draft == null || !mounted) return;
@@ -726,7 +736,82 @@ class HealthScreenState extends State<HealthScreen>
   }
 
 
-  Widget _buildVaccineSection() {
+  Future<void> _onVaccineFilterChanged(int? catId) async {
+    setState(() => _vaccineFilterCatId = catId);
+    await _loadVaccines();
+  }
+
+  String? get _vaccineFilterLabel {
+    if (_vaccineFilterCatId == null) return null;
+    for (final cat in _catOptions) {
+      if (cat.catId == _vaccineFilterCatId) return cat.name;
+    }
+    return null;
+  }
+
+  Future<void> _pickVaccineFilterCat() async {
+    if (_catOptions.isEmpty) return;
+
+    final picked = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _HealthCatFilterSheet(
+        cats: _catOptions,
+        selectedCatId: _vaccineFilterCatId,
+      ),
+    );
+    if (!mounted || picked == _vaccineFilterCatId) return;
+    await _onVaccineFilterChanged(picked);
+  }
+
+  Widget _buildVaccineCatFilter() {
+    if (_catOptions.isEmpty) return const SizedBox.shrink();
+
+    final label = _vaccineFilterLabel ?? 'Tüm kediler';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _vaccinesLoading ? null : _pickVaccineFilterCat,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: HealthUi.fieldBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.pets_rounded,
+                size: 18,
+                color: HealthUi.accentPink.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: HealthUi.titleInk,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 22,
+                color: HealthUi.muted.withValues(alpha: 0.85),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVaccineSectionBody() {
     if (_vaccinesLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -762,10 +847,13 @@ class HealthScreenState extends State<HealthScreen>
     }
 
     if (_sortedVaccines.isEmpty) {
+      final emptyMessage = _vaccineFilterCatId != null
+          ? 'Bu kedi için henüz aşı kaydı yok. Sağ üstteki + ile ekleyin.'
+          : 'Henüz aşı kaydı yok. Sağ üstteki + ile ekleyin.';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
-          'Henüz aşı kaydı yok. Sağ üstteki + ile ekleyin.',
+          emptyMessage,
           style: TextStyle(
             fontSize: 14,
             height: 1.35,
@@ -822,6 +910,17 @@ class HealthScreenState extends State<HealthScreen>
             onDelete: () => _confirmDeleteVaccine(record),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildVaccineSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildVaccineCatFilter(),
+        if (_catOptions.isNotEmpty) const SizedBox(height: 12),
+        _buildVaccineSectionBody(),
       ],
     );
   }
@@ -1497,6 +1596,104 @@ class _MedicationListTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HealthCatFilterSheet extends StatelessWidget {
+  const _HealthCatFilterSheet({
+    required this.cats,
+    required this.selectedCatId,
+  });
+
+  final List<VaccineCatOption> cats;
+  final int? selectedCatId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      decoration: BoxDecoration(
+        color: HealthUi.cardBg,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: HealthUi.fieldBorder,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Kedi seç',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: HealthUi.titleInk,
+                  ),
+                ),
+              ),
+            ),
+            _HealthCatFilterTile(
+              label: 'Tüm kediler',
+              selected: selectedCatId == null,
+              onTap: () => Navigator.pop(context, null),
+            ),
+            for (final cat in cats)
+              _HealthCatFilterTile(
+                label: cat.name,
+                selected: selectedCatId == cat.catId,
+                onTap: () => Navigator.pop(context, cat.catId),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HealthCatFilterTile extends StatelessWidget {
+  const _HealthCatFilterTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Icon(
+        Icons.pets_rounded,
+        size: 20,
+        color: selected ? HealthUi.accentPink : HealthUi.muted,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          color: HealthUi.titleInk,
+        ),
+      ),
+      trailing: selected
+          ? const Icon(Icons.check_rounded, color: HealthUi.accentPink)
+          : null,
     );
   }
 }
