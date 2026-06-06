@@ -109,7 +109,7 @@ class _MyCatsScreenState extends State<MyCatsScreen> {
     if (!mounted || result == null) return;
     if (result.draft != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kilo güncellendi.')),
+        const SnackBar(content: Text('Profil güncellendi.')),
       );
     }
     if (result.deletedCatId != null) {

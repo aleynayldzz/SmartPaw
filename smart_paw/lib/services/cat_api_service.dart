@@ -130,14 +130,26 @@ class CatApiService {
     return _expectCatResponse(res);
   }
 
-  static Future<Map<String, dynamic>> updateCatWeight(
-    int catId,
-    double weightKg,
-  ) async {
+  static Future<Map<String, dynamic>> updateCat({
+    required int catId,
+    required String name,
+    required int breedId,
+    required String birthDateIso,
+    required bool isFemale,
+    required double weightKg,
+    required bool isNeutered,
+  }) async {
     final res = await http.put(
       ApiConfig.catUri(catId),
       headers: _headers(auth: true),
-      body: jsonEncode({'weight': weightKg}),
+      body: jsonEncode({
+        'name': name,
+        'breed_id': breedId,
+        'birth_date': birthDateIso,
+        'gender': isFemale ? 'female' : 'male',
+        'weight': weightKg,
+        'is_neutered': isNeutered,
+      }),
     );
     return _expectCatResponse(res);
   }

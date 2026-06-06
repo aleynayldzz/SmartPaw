@@ -6,6 +6,13 @@ const NAME_MAX = 30;
 const WEIGHT_MIN = 0.5;
 const WEIGHT_MAX = 25;
 
+function displayWeight(row) {
+  if (row.latest_vet_weight != null) {
+    return Number(row.latest_vet_weight);
+  }
+  return row.weight != null ? Number(row.weight) : null;
+}
+
 function mapCatRow(row) {
   if (!row) return null;
   return {
@@ -14,7 +21,7 @@ function mapCatRow(row) {
     breed_id: row.breed_id,
     name: row.name,
     birth_date: row.birth_date,
-    weight: row.weight != null ? Number(row.weight) : null,
+    weight: displayWeight(row),
     gender: row.gender,
     is_neutered: row.is_neutered,
     notes: row.notes,
@@ -167,7 +174,16 @@ function buildJoinSelect(hasSlug) {
     c.updated_at,
     b.breed_name AS breed_name,
     ${slugExpr},
-    b.avatar_url AS avatar_url
+    b.avatar_url AS avatar_url,
+    (
+      SELECT v.weight
+      FROM vet_visits v
+      WHERE v.cat_id = c.cat_id
+        AND v.weight IS NOT NULL
+        AND v.weight > 0
+      ORDER BY v.visit_date DESC, v.visit_id DESC
+      LIMIT 1
+    ) AS latest_vet_weight
   FROM cats c
   LEFT JOIN cat_breeds b ON c.breed_id = b.breed_id
 `;
@@ -296,27 +312,28 @@ async function updateCat(userId, catId, body) {
   }
 
   const b = body ?? {};
-  const keysWithValues = Object.keys(b).filter(
-    (k) => b[k] !== undefined && b[k] !== null
-  );
-  const disallowed = keysWithValues.filter((k) => k !== "weight");
-  if (disallowed.length > 0) {
-    return {
-      statusCode: 400,
-      json: {
-        ok: false,
-        message:
-          "Only weight may be updated; neutered status and other fields cannot be changed.",
-        fields: disallowed
-      }
-    };
+
+  const nameR = validateName(b.name);
+  if (!nameR.valid) {
+    return { statusCode: 400, json: { ok: false, message: nameR.error } };
   }
 
-  if (!keysWithValues.includes("weight")) {
-    return {
-      statusCode: 400,
-      json: { ok: false, message: "weight is required." }
-    };
+  const breedR = parseBreedId(b.breed_id);
+  if (!breedR.valid) {
+    return { statusCode: 400, json: { ok: false, message: breedR.error } };
+  }
+  if (!(await breedExists(breedR.value))) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid breed_id." } };
+  }
+
+  const dateR = parseDateOnly(b.birth_date);
+  if (!dateR.valid) {
+    return { statusCode: 400, json: { ok: false, message: dateR.error } };
+  }
+
+  const gR = parseGender(b.gender);
+  if (!gR.valid) {
+    return { statusCode: 400, json: { ok: false, message: gR.error } };
   }
 
   const wR = parseWeight(b.weight);
@@ -324,9 +341,34 @@ async function updateCat(userId, catId, body) {
     return { statusCode: 400, json: { ok: false, message: wR.error } };
   }
 
+  const nR = parseNeutered(b.is_neutered);
+  if (!nR.valid) {
+    return { statusCode: 400, json: { ok: false, message: nR.error } };
+  }
+
   await pool.query(
-    `UPDATE cats SET weight = $1 WHERE cat_id = $2 AND user_id = $3`,
-    [wR.value, id, userId]
+    `
+    UPDATE cats
+    SET
+      breed_id = $1,
+      name = $2,
+      birth_date = $3::date,
+      weight = $4,
+      gender = $5,
+      is_neutered = $6,
+      updated_at = NOW()
+    WHERE cat_id = $7 AND user_id = $8
+    `,
+    [
+      breedR.value,
+      nameR.value,
+      dateR.value,
+      wR.value,
+      gR.value,
+      nR.value,
+      id,
+      userId
+    ]
   );
 
   return getCat(userId, id);

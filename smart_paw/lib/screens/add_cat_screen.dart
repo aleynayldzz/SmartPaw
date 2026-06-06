@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../data/cat_breeds.dart';
 import '../models/cat_profile.dart';
 import '../services/cat_api_service.dart';
-import '../services/weight_history_service.dart';
 import '../widgets/health/health_ui.dart';
 
 const _kCreamBg = Color(0xFFFFF9F1);
@@ -547,16 +546,13 @@ class _AddCatScreenState extends State<AddCatScreen> {
   }
 
   bool _validate() {
-    if (!_isEditing && _breed?.breedId == null) {
+    if (_breed?.breedId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_breedsLoadError ?? 'Irk seçmek için ırkların yüklenmesi gerekir.'),
         ),
       );
       return false;
-    }
-    if (_isEditing) {
-      return true;
     }
     final ne = _nameError(_nameCtrl.text);
     if (ne != null) {
@@ -597,11 +593,15 @@ class _AddCatScreenState extends State<AddCatScreen> {
     setState(() => _saving = true);
     try {
       if (_isEditing) {
-        final map = await CatApiService.updateCatWeight(
-          widget.initial!.catId,
-          _weightKg,
+        final map = await CatApiService.updateCat(
+          catId: widget.initial!.catId,
+          name: _nameCtrl.text.trim(),
+          breedId: _breed!.breedId!,
+          birthDateIso: _birthIso(_birth!),
+          isFemale: _isFemale!,
+          weightKg: _weightKg,
+          isNeutered: _isNeutered!,
         );
-        WeightHistoryService.instance.markDirty();
         if (!mounted) return;
         Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
       } else {
@@ -613,7 +613,6 @@ class _AddCatScreenState extends State<AddCatScreen> {
           weightKg: _weightKg,
           isNeutered: _isNeutered!,
         );
-        WeightHistoryService.instance.markDirty();
         if (!mounted) return;
         Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
       }
@@ -702,13 +701,11 @@ class _AddCatScreenState extends State<AddCatScreen> {
                       label: 'İsim',
                       child: TextField(
                         controller: _nameCtrl,
-                        readOnly: _isEditing,
                         maxLength: 30,
                         textInputAction: TextInputAction.next,
                         decoration: _inputDecoration(
                           hintText: 'Kedinizin adı',
                           counterText: '',
-                          fillMuted: _isEditing,
                         ),
                       ),
                     ),
@@ -717,7 +714,6 @@ class _AddCatScreenState extends State<AddCatScreen> {
                       child: _SelectRow(
                         text: _breed?.labelTr ?? 'İrk seç',
                         trailing: Icons.keyboard_arrow_down_rounded,
-                        enabled: !_isEditing,
                         onTap: () => _pickBreed(context),
                       ),
                     ),
@@ -733,7 +729,6 @@ class _AddCatScreenState extends State<AddCatScreen> {
                                   : 'Tarih seç',
                               trailing: Icons.calendar_today_rounded,
                               dense: true,
-                              enabled: !_isEditing,
                               onTap: _pickBirth,
                             ),
                           ),
@@ -783,7 +778,6 @@ class _AddCatScreenState extends State<AddCatScreen> {
                             ? 'Seç'
                             : (_isFemale! ? 'Kız' : 'Erkek'),
                         trailing: Icons.keyboard_arrow_down_rounded,
-                        enabled: !_isEditing,
                         onTap: _pickGender,
                       ),
                     ),
@@ -794,7 +788,6 @@ class _AddCatScreenState extends State<AddCatScreen> {
                             ? 'Seç'
                             : (_isNeutered! ? 'Kısır' : 'Kısır değil'),
                         trailing: Icons.keyboard_arrow_down_rounded,
-                        enabled: !_isEditing,
                         onTap: _pickNeutered,
                       ),
                     ),
@@ -907,14 +900,12 @@ class _SelectRow extends StatelessWidget {
     required this.trailing,
     required this.onTap,
     this.dense = false,
-    this.enabled = true,
   });
 
   final String text;
   final IconData trailing;
   final VoidCallback onTap;
   final bool dense;
-  final bool enabled;
 
   static const Set<String> _placeholders = {
     'İrk seç',
@@ -924,8 +915,6 @@ class _SelectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        enabled ? _kFieldBorder : Colors.grey.shade400.withValues(alpha: 0.6);
     final child = Container(
       padding: EdgeInsets.symmetric(
         horizontal: 16,
@@ -933,8 +922,8 @@ class _SelectRow extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
-        color: enabled ? Colors.white : const Color(0xFFF5F4F2),
+        border: Border.all(color: _kFieldBorder),
+        color: Colors.white,
       ),
       child: Row(
         children: [
@@ -944,25 +933,16 @@ class _SelectRow extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: dense ? 14 : 15,
-                color: enabled
-                    ? (_placeholders.contains(text)
-                        ? Colors.grey.shade600
-                        : _kTitleColor)
-                    : Colors.grey.shade700,
+                color: _placeholders.contains(text)
+                    ? Colors.grey.shade600
+                    : _kTitleColor,
               ),
             ),
           ),
-          if (enabled)
-            Icon(trailing, color: _kTitleColor, size: 22)
-          else
-            Icon(Icons.lock_outline_rounded, color: Colors.grey.shade600, size: 20),
+          Icon(trailing, color: _kTitleColor, size: 22),
         ],
       ),
     );
-
-    if (!enabled) {
-      return child;
-    }
 
     return Material(
       color: Colors.transparent,
