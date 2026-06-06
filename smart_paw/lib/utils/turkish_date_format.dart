@@ -4,12 +4,12 @@ DateTime? parseApiCalendarDate(dynamic value) {
   final s = value.toString().trim();
   if (s.isEmpty) return null;
 
-  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
-  if (m != null) {
+  if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) {
+    final parts = s.split('-');
     return DateTime(
-      int.parse(m.group(1)!),
-      int.parse(m.group(2)!),
-      int.parse(m.group(3)!),
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
     );
   }
 

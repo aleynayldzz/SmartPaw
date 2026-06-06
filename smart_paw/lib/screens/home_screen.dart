@@ -25,10 +25,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const int _healthTabIndex = 1;
+  static const int _careTabIndex = 2;
   static const int _analysisTabIndex = 3;
   static const int _profileTabIndex = 4;
 
   final _healthKey = GlobalKey<HealthScreenState>();
+  final _careKey = GlobalKey<CareScreenState>();
   final _analysisKey = GlobalKey<AnalysisScreenState>();
 
   int _navIndex = 0;
@@ -92,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadDailyRoutine();
+      _careKey.currentState?.reloadFromApi(silent: true);
     }
   }
 
@@ -238,6 +241,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           if (i == 0 && _navIndex != 0) {
             _loadDailyRoutine();
           }
+          if (i == _careTabIndex) {
+            _careKey.currentState?.reloadFromApi(silent: true);
+          }
           if (i == _analysisTabIndex) {
             _analysisKey.currentState?.refresh();
           }
@@ -278,6 +284,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       },
                     ),
                     CareScreen(
+                      key: _careKey,
                       onBackToHome: () {
                         setState(() => _navIndex = 0);
                         _loadDailyRoutine();

@@ -1,5 +1,7 @@
 // Kum takibi — tam değişim ve yıkama.
 
+import '../utils/turkish_date_format.dart';
+
 enum LitterCleaningStatus { ok, warning, overdue }
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -14,6 +16,28 @@ class LitterTrackingRecord {
   final int? id;
   final DateTime lastCleaningDate;
   final int frequencyDays;
+
+  static int? _parseId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  static int _parseFrequencyDays(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 21;
+  }
+
+  factory LitterTrackingRecord.fromJson(Map<String, dynamic> json) {
+    return LitterTrackingRecord(
+      id: _parseId(json['litter_id']),
+      lastCleaningDate:
+          parseApiCalendarDate(json['last_cleaning_date']) ?? DateTime.now(),
+      frequencyDays: _parseFrequencyDays(json['frequency_days']),
+    );
+  }
 
   DateTime nextCleaningDate([DateTime? reference]) {
     final last = _dateOnly(lastCleaningDate);
