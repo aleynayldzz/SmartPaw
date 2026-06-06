@@ -1379,6 +1379,11 @@ class _MedicationListTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  String get _catNameLabel {
+    final n = record.catName?.trim();
+    return (n != null && n.isNotEmpty) ? n : 'Kedi';
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = record.isActive && record.daysRemaining > 0;
@@ -1393,7 +1398,11 @@ class _MedicationListTile extends StatelessWidget {
             : record.frequency == 'asNeeded'
                 ? 'Gerektiğinde'
                 : record.frequency;
-    final subtitle = '$freqTr · $remainingLabel';
+    final subtitle = [
+      _catNameLabel,
+      freqTr,
+      remainingLabel,
+    ].join(' · ');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
