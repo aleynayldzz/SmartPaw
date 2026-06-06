@@ -15,7 +15,7 @@ async function respond(res, pending) {
 }
 
 router.get("/", requireAuth, (req, res) =>
-  respond(res, vetVisitService.listForUser(req.auth.userId))
+  respond(res, vetVisitService.listForUser(req.auth.userId, req.query))
 );
 
 router.post("/", requireAuth, (req, res) =>

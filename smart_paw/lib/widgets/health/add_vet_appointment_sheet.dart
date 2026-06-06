@@ -17,11 +17,15 @@ class AddVetAppointmentSheet extends StatefulWidget {
     required this.cats,
     this.initial,
     this.mode = VetSheetMode.create,
+    this.defaultCatId,
   });
 
   final List<VaccineCatOption> cats;
   final VetAppointmentRecord? initial;
   final VetSheetMode mode;
+
+  /// Oluşturma modunda önceden seçili kedi (veteriner filtresinden gelir).
+  final int? defaultCatId;
 
   bool get readOnly => mode == VetSheetMode.view;
 
@@ -83,6 +87,9 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
       _notesCtrl.text = ini.doctorNotes;
       _weightKg = ini.weightKg;
       _syncReminderForNextDate();
+    } else if (widget.defaultCatId != null &&
+        widget.cats.any((c) => c.catId == widget.defaultCatId)) {
+      _selectedCatId = widget.defaultCatId;
     } else if (widget.cats.length == 1) {
       _selectedCatId = widget.cats.first.catId;
     }

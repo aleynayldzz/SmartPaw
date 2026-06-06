@@ -43,6 +43,7 @@ class HealthScreenState extends State<HealthScreen>
   bool _vaccinesLoading = true;
   String? _vaccinesError;
   List<VetAppointmentRecord> _vetAppointments = [];
+  int? _vetVisitFilterCatId;
   bool _vetVisitsLoading = true;
   String? _vetVisitsError;
   List<MedicationRecord> _medications = [];
@@ -109,6 +110,10 @@ class HealthScreenState extends State<HealthScreen>
             !options.any((c) => c.catId == _vaccineFilterCatId)) {
           _vaccineFilterCatId = null;
         }
+        if (_vetVisitFilterCatId != null &&
+            !options.any((c) => c.catId == _vetVisitFilterCatId)) {
+          _vetVisitFilterCatId = null;
+        }
       });
     } on CatApiException catch (_) {
       if (!mounted) return;
@@ -159,7 +164,8 @@ class HealthScreenState extends State<HealthScreen>
       });
     }
     try {
-      final visits = await VetVisitApiService.fetchAll();
+      final visits =
+          await VetVisitApiService.fetchAll(catId: _vetVisitFilterCatId);
       if (!mounted) return;
       setState(() {
         _vetAppointments = visits;
@@ -208,6 +214,8 @@ class HealthScreenState extends State<HealthScreen>
         cats: _catOptions,
         initial: existing,
         mode: mode,
+        defaultCatId:
+            mode == VetSheetMode.create ? _vetVisitFilterCatId : null,
       ),
     );
     if (draft == null || !mounted) return;
@@ -589,7 +597,95 @@ class HealthScreenState extends State<HealthScreen>
     }
   }
 
-  Widget _buildVetVisitSection() {
+  Future<void> _onVetVisitFilterChanged(int? catId) async {
+    setState(() => _vetVisitFilterCatId = catId);
+    await _loadVetVisits();
+  }
+
+  String? _filterLabelForCatId(int? catId) {
+    if (catId == null) return null;
+    for (final cat in _catOptions) {
+      if (cat.catId == catId) return cat.name;
+    }
+    return null;
+  }
+
+  Future<void> _pickVetVisitFilterCat() async {
+    if (_catOptions.isEmpty) return;
+
+    final picked = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _HealthCatFilterSheet(
+        cats: _catOptions,
+        selectedCatId: _vetVisitFilterCatId,
+      ),
+    );
+    if (!mounted || picked == _vetVisitFilterCatId) return;
+    await _onVetVisitFilterChanged(picked);
+  }
+
+  Widget _buildHealthCatFilterRow({
+    required String label,
+    required bool loading,
+    required VoidCallback onPick,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: loading ? null : onPick,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: HealthUi.accentPink.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.pets_rounded,
+                size: 18,
+                color: HealthUi.accentPink.withValues(alpha: 0.9),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: HealthUi.titleInk,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 22,
+                color: HealthUi.muted.withValues(alpha: 0.85),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVetVisitCatFilter() {
+    if (_catOptions.isEmpty) return const SizedBox.shrink();
+
+    final label = _filterLabelForCatId(_vetVisitFilterCatId) ?? 'Tüm kediler';
+    return _buildHealthCatFilterRow(
+      label: label,
+      loading: _vetVisitsLoading,
+      onPick: _pickVetVisitFilterCat,
+    );
+  }
+
+  Widget _buildVetVisitSectionBody() {
     if (_vetVisitsLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -625,10 +721,13 @@ class HealthScreenState extends State<HealthScreen>
     }
 
     if (_sortedVetAppointments.isEmpty) {
+      final emptyMessage = _vetVisitFilterCatId != null
+          ? 'Bu kedi için henüz veteriner kaydı yok. Sağ üstteki + ile ekleyin.'
+          : 'Henüz randevu kaydı yok. Sağ üstteki + ile ekleyin.';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
-          'Henüz randevu kaydı yok. Sağ üstteki + ile ekleyin.',
+          emptyMessage,
           style: TextStyle(
             fontSize: 14,
             height: 1.35,
@@ -689,6 +788,17 @@ class HealthScreenState extends State<HealthScreen>
     );
   }
 
+  Widget _buildVetVisitSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildVetVisitCatFilter(),
+        if (_catOptions.isNotEmpty) const SizedBox(height: 12),
+        _buildVetVisitSectionBody(),
+      ],
+    );
+  }
+
   Future<void> _confirmDeleteMedication(MedicationRecord record) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -741,14 +851,6 @@ class HealthScreenState extends State<HealthScreen>
     await _loadVaccines();
   }
 
-  String? get _vaccineFilterLabel {
-    if (_vaccineFilterCatId == null) return null;
-    for (final cat in _catOptions) {
-      if (cat.catId == _vaccineFilterCatId) return cat.name;
-    }
-    return null;
-  }
-
   Future<void> _pickVaccineFilterCat() async {
     if (_catOptions.isEmpty) return;
 
@@ -767,47 +869,12 @@ class HealthScreenState extends State<HealthScreen>
   Widget _buildVaccineCatFilter() {
     if (_catOptions.isEmpty) return const SizedBox.shrink();
 
-    final label = _vaccineFilterLabel ?? 'Tüm kediler';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _vaccinesLoading ? null : _pickVaccineFilterCat,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: HealthUi.fieldBorder),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.pets_rounded,
-                size: 18,
-                color: HealthUi.accentPink.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: HealthUi.titleInk,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 22,
-                color: HealthUi.muted.withValues(alpha: 0.85),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final label =
+        _filterLabelForCatId(_vaccineFilterCatId) ?? 'Tüm kediler';
+    return _buildHealthCatFilterRow(
+      label: label,
+      loading: _vaccinesLoading,
+      onPick: _pickVaccineFilterCat,
     );
   }
 

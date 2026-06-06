@@ -143,6 +143,17 @@ function parseCatId(value) {
   return { valid: true, value: id };
 }
 
+function parseCatIdQuery(value) {
+  if (value === undefined || value === null || value === "") {
+    return { valid: true, value: null };
+  }
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    return { valid: false, error: "cat_id must be a positive integer." };
+  }
+  return { valid: true, value: id };
+}
+
 async function assertCatOwner(userId, catId) {
   const r = await pool.query(
     `SELECT cat_id, name FROM cats WHERE cat_id = $1 AND user_id = $2`,
@@ -151,13 +162,25 @@ async function assertCatOwner(userId, catId) {
   return r.rows[0] ?? null;
 }
 
-async function listForUser(userId) {
+async function listForUser(userId, query = {}) {
   if (!pool) {
     return { statusCode: 500, json: dbNotConfiguredPayload() };
   }
 
-  const res = await pool.query(
-    `
+  const catParsed = parseCatIdQuery(query.cat_id);
+  if (!catParsed.valid) {
+    return { statusCode: 400, json: { ok: false, message: catParsed.error } };
+  }
+
+  if (catParsed.value != null) {
+    const cat = await assertCatOwner(userId, catParsed.value);
+    if (!cat) {
+      return { statusCode: 404, json: { ok: false, message: "Cat not found." } };
+    }
+  }
+
+  const params = [userId];
+  let sql = `
     SELECT
       v.visit_id,
       v.cat_id,
@@ -172,10 +195,16 @@ async function listForUser(userId) {
     FROM vet_visits v
     INNER JOIN cats c ON c.cat_id = v.cat_id
     WHERE c.user_id = $1
-    ORDER BY v.visit_date DESC, v.visit_id DESC
-    `,
-    [userId]
-  );
+  `;
+
+  if (catParsed.value != null) {
+    params.push(catParsed.value);
+    sql += ` AND v.cat_id = $${params.length}`;
+  }
+
+  sql += ` ORDER BY v.visit_date DESC, v.visit_id DESC`;
+
+  const res = await pool.query(sql, params);
 
   return {
     statusCode: 200,

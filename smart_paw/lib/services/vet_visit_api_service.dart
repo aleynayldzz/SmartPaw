@@ -41,9 +41,9 @@ class VetVisitApiService {
     return '${d.year}-$m-$day';
   }
 
-  static Future<List<VetAppointmentRecord>> fetchAll() async {
+  static Future<List<VetAppointmentRecord>> fetchAll({int? catId}) async {
     final res = await http.get(
-      ApiConfig.vetVisitsUri(),
+      ApiConfig.vetVisitsUri(catId: catId),
       headers: _headers(),
     );
     final body = _decodeBody(res.body);
