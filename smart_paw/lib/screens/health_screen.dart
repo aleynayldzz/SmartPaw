@@ -1278,11 +1278,7 @@ class _UpcomingVaccineChip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.event_outlined,
-            size: 18,
-            color: HealthUi.accentPink,
-          ),
+          HealthUi.calendarIcon(size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -1323,11 +1319,7 @@ class _UpcomingVetVisitChip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.event_outlined,
-            size: 18,
-            color: HealthUi.accentPink,
-          ),
+          HealthUi.calendarIcon(size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

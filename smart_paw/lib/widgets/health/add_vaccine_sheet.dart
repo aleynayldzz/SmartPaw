@@ -674,12 +674,7 @@ class _DateField extends StatelessWidget {
                 ),
               ),
             ),
-            if (!readOnly)
-              Icon(
-                Icons.calendar_today_outlined,
-                size: 20,
-                color: HealthUi.muted.withValues(alpha: 0.8),
-              ),
+            if (!readOnly) HealthUi.calendarIcon(),
           ],
         ),
       ),
