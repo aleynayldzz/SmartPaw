@@ -1,96 +1,122 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../config/api_config.dart';
 import '../models/weekly_care_completion.dart';
+import 'auth_session.dart';
 import 'daily_routine_api_service.dart';
 
 class WeeklyCareCompletionException implements Exception {
-  WeeklyCareCompletionException(this.message);
+  WeeklyCareCompletionException(this.message, [this.statusCode]);
 
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;
 }
 
-/// Haftalık bakım tamamlama verisini günlük rutin API'sinden türetir.
-/// İleride özel bir haftalık endpoint eklenebilir.
 abstract final class WeeklyCareCompletionService {
   static const dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
-  static DateTime _dateOnly(DateTime value) =>
-      DateTime(value.year, value.month, value.day);
-
-  /// Pazartesi gününü hafta başlangıcı kabul eder.
-  static DateTime weekStartMonday(DateTime reference) {
-    final local = _dateOnly(reference);
-    return local.subtract(Duration(days: local.weekday - DateTime.monday));
+  static Map<String, String> _headers() {
+    final token = AuthSession.accessToken;
+    return {
+      'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
   }
 
-  static String _formatDate(DateTime date) {
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$m-$d';
+  static Map<String, dynamic> _decodeBody(String raw) {
+    if (raw.isEmpty) return {};
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) return decoded.cast<String, dynamic>();
+    return {};
   }
 
-  static int _completionPercent(int totalCompleted, int maxTasksPerDay) {
-    if (maxTasksPerDay <= 0) return 0;
-    final maxPossible = maxTasksPerDay * 7;
-    final raw = ((totalCompleted / maxPossible) * 100).round();
-    return raw.clamp(0, 100);
-  }
-
-  static Future<WeeklyCareCompletion> fetchCurrentWeek() async {
-    final now = DateTime.now();
-    final today = _dateOnly(now);
-    final weekStart = weekStartMonday(now);
-    final dates = List.generate(
-      7,
-      (index) => weekStart.add(Duration(days: index)),
+  static DateTime _parseDate(String value) {
+    final parts = value.split('-');
+    if (parts.length != 3) return DateTime.now();
+    return DateTime(
+      int.tryParse(parts[0]) ?? 1970,
+      int.tryParse(parts[1]) ?? 1,
+      int.tryParse(parts[2]) ?? 1,
     );
+  }
 
-    final snapshots = await Future.wait(
-      dates.map((date) async {
-        if (date.isAfter(today)) return null;
-        try {
-          return await DailyRoutineApiService.fetchForDate(_formatDate(date));
-        } on DailyRoutineApiException catch (e) {
-          throw WeeklyCareCompletionException(e.message);
-        }
-      }),
-    );
+  static WeeklyCareCompletion _fromData(Map<String, dynamic> data) {
+    final daysRaw = data['days'];
+    final days = <DailyCareDaySummary>[];
 
-    var maxTasksPerDay = 0;
-    for (final snap in snapshots) {
-      if (snap == null) continue;
-      if (snap.totalApplicable > maxTasksPerDay) {
-        maxTasksPerDay = snap.totalApplicable;
+    if (daysRaw is List) {
+      for (final item in daysRaw) {
+        if (item is! Map) continue;
+        final day = item.cast<String, dynamic>();
+        final dateStr = day['date']?.toString() ?? '';
+        if (dateStr.isEmpty) continue;
+        days.add(
+          DailyCareDaySummary(
+            date: _parseDate(dateStr),
+            completedCount: (day['completedCount'] as num?)?.toInt() ??
+                int.tryParse(day['completedCount']?.toString() ?? '') ??
+                0,
+            isToday: day['isToday'] == true,
+            isFuture: day['isFuture'] == true,
+          ),
+        );
       }
     }
 
-    final days = <DailyCareDaySummary>[];
-    var totalCompleted = 0;
+    final weekStartStr = data['weekStart']?.toString() ?? '';
+    final maxTasks = (data['maxTasksPerDay'] as num?)?.toInt() ??
+        int.tryParse(data['maxTasksPerDay']?.toString() ?? '') ??
+        0;
+    final totalCompleted = (data['totalCompleted'] as num?)?.toInt() ??
+        int.tryParse(data['totalCompleted']?.toString() ?? '') ??
+        0;
+    final completionPercent = (data['completionPercent'] as num?)?.toInt() ??
+        int.tryParse(data['completionPercent']?.toString() ?? '') ??
+        0;
 
-    for (var i = 0; i < dates.length; i++) {
-      final date = dates[i];
-      final snap = snapshots[i];
-      final isFuture = date.isAfter(today);
-      final completed = isFuture ? 0 : (snap?.completedCount ?? 0);
+    return WeeklyCareCompletion(
+      weekStart: weekStartStr.isEmpty ? DateTime.now() : _parseDate(weekStartStr),
+      days: days,
+      maxTasksPerDay: maxTasks,
+      totalCompleted: totalCompleted,
+      completionPercent: completionPercent.clamp(0, 100),
+    );
+  }
 
-      totalCompleted += completed;
-      days.add(
-        DailyCareDaySummary(
-          date: date,
-          completedCount: completed,
-          isToday: date == today,
-          isFuture: isFuture,
-        ),
+  static Future<WeeklyCareCompletion> fetchCurrentWeek() async {
+    final date = DailyRoutineApiService.todayLocalDateString();
+    final uri = ApiConfig.weeklyCareCompletionUri(date: date);
+    final res = await http.get(uri, headers: _headers());
+    final body = _decodeBody(res.body);
+
+    if (res.statusCode == 401) {
+      throw WeeklyCareCompletionException(
+        'Oturum süresi dolmuş olabilir. Lütfen tekrar giriş yapın.',
+        res.statusCode,
+      );
+    }
+    if (res.statusCode != 200 || body['ok'] != true) {
+      throw WeeklyCareCompletionException(
+        body['message']?.toString() ??
+            'Haftalık bakım analizi yüklenemedi.',
+        res.statusCode,
       );
     }
 
-    return WeeklyCareCompletion(
-      weekStart: weekStart,
-      days: days,
-      maxTasksPerDay: maxTasksPerDay,
-      totalCompleted: totalCompleted,
-      completionPercent: _completionPercent(totalCompleted, maxTasksPerDay),
-    );
+    final data = body['data'];
+    if (data is! Map) {
+      throw WeeklyCareCompletionException(
+        'Geçersiz sunucu yanıtı.',
+        res.statusCode,
+      );
+    }
+
+    return _fromData(data.cast<String, dynamic>());
   }
 }

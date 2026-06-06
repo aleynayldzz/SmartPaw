@@ -91,4 +91,10 @@ class ApiConfig {
     if (params.isEmpty) return base;
     return base.replace(queryParameters: params);
   }
+
+  static Uri weeklyCareCompletionUri({String? date}) {
+    final base = '$baseUrl/api/weekly-care-completion';
+    if (date == null || date.isEmpty) return Uri.parse(base);
+    return Uri.parse(base).replace(queryParameters: {'date': date});
+  }
 }

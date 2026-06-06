@@ -13,6 +13,7 @@ const medicationRoutes = require("./routes/medication.routes");
 const foodTrackingRoutes = require("./routes/food-tracking.routes");
 const litterTrackingRoutes = require("./routes/litter-tracking.routes");
 const weightHistoryRoutes = require("./routes/weight-history.routes");
+const weeklyCareCompletionRoutes = require("./routes/weekly-care-completion.routes");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/api/medications", medicationRoutes);
 app.use("/api/food-tracking", foodTrackingRoutes);
 app.use("/api/litter-tracking", litterTrackingRoutes);
 app.use("/api/weight-history", weightHistoryRoutes);
+app.use("/api/weekly-care-completion", weeklyCareCompletionRoutes);
 
 const basePort = Number(process.env.PORT) || 3001;
 
