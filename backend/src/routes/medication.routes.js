@@ -16,7 +16,7 @@ async function respond(res, pending) {
 
 // CRUD
 router.get("/", requireAuth, (req, res) =>
-  respond(res, medicationService.listForUser(req.auth.userId))
+  respond(res, medicationService.listForUser(req.auth.userId, req.query))
 );
 
 router.post("/", requireAuth, (req, res) =>

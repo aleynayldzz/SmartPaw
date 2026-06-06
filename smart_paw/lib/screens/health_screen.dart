@@ -47,6 +47,7 @@ class HealthScreenState extends State<HealthScreen>
   bool _vetVisitsLoading = true;
   String? _vetVisitsError;
   List<MedicationRecord> _medications = [];
+  int? _medicationFilterCatId;
   bool _medicationsLoading = true;
   String? _medicationsError;
 
@@ -113,6 +114,10 @@ class HealthScreenState extends State<HealthScreen>
         if (_vetVisitFilterCatId != null &&
             !options.any((c) => c.catId == _vetVisitFilterCatId)) {
           _vetVisitFilterCatId = null;
+        }
+        if (_medicationFilterCatId != null &&
+            !options.any((c) => c.catId == _medicationFilterCatId)) {
+          _medicationFilterCatId = null;
         }
       });
     } on CatApiException catch (_) {
@@ -293,6 +298,8 @@ class HealthScreenState extends State<HealthScreen>
         cats: _catOptions,
         initial: existing,
         mode: mode,
+        defaultCatId:
+            mode == MedicationSheetMode.create ? _medicationFilterCatId : null,
       ),
     );
     if (!mounted) return;
@@ -352,7 +359,8 @@ class HealthScreenState extends State<HealthScreen>
       });
     }
     try {
-      final meds = await MedicationApiService.fetchAll();
+      final meds =
+          await MedicationApiService.fetchAll(catId: _medicationFilterCatId);
 
       if (!mounted) return;
       setState(() {
@@ -799,6 +807,126 @@ class HealthScreenState extends State<HealthScreen>
     );
   }
 
+  Future<void> _onMedicationFilterChanged(int? catId) async {
+    setState(() => _medicationFilterCatId = catId);
+    await _loadMedications();
+  }
+
+  Future<void> _pickMedicationFilterCat() async {
+    if (_catOptions.isEmpty) return;
+
+    final picked = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _HealthCatFilterSheet(
+        cats: _catOptions,
+        selectedCatId: _medicationFilterCatId,
+      ),
+    );
+    if (!mounted || picked == _medicationFilterCatId) return;
+    await _onMedicationFilterChanged(picked);
+  }
+
+  Widget _buildMedicationCatFilter() {
+    if (_catOptions.isEmpty) return const SizedBox.shrink();
+
+    final label =
+        _filterLabelForCatId(_medicationFilterCatId) ?? 'Tüm kediler';
+    return _buildHealthCatFilterRow(
+      label: label,
+      loading: _medicationsLoading,
+      onPick: _pickMedicationFilterCat,
+    );
+  }
+
+  Widget _buildMedicationSectionBody() {
+    if (_medicationsLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_medicationsError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _medicationsError!,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.35,
+              color: HealthUi.muted.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _loadMedications,
+            child: const Text('Yeniden dene'),
+          ),
+        ],
+      );
+    }
+
+    if (_sortedMedications.isEmpty) {
+      final emptyMessage = _medicationFilterCatId != null
+          ? 'Bu kedi için henüz ilaç kaydı yok. Sağ üstteki + ile ekleyin.'
+          : 'Henüz ilaç kaydı yok. Sağ üstteki + ile ekleyin.';
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          emptyMessage,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.35,
+            color: HealthUi.muted.withValues(alpha: 0.9),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final (i, record) in _sortedMedications.indexed) ...[
+          if (i > 0)
+            Divider(
+              height: 1,
+              color: HealthUi.fieldBorder.withValues(alpha: 0.6),
+            ),
+          _MedicationListTile(
+            record: record,
+            onTap: () => _openMedicationSheet(
+              mode: MedicationSheetMode.view,
+              existing: record,
+            ),
+            onEdit: () => _openMedicationSheet(
+              mode: MedicationSheetMode.edit,
+              existing: record,
+            ),
+            onDelete: () => _confirmDeleteMedication(record),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMedicationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildMedicationCatFilter(),
+        if (_catOptions.isNotEmpty) const SizedBox(height: 12),
+        _buildMedicationSectionBody(),
+      ],
+    );
+  }
+
   Future<void> _confirmDeleteMedication(MedicationRecord record) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -1019,76 +1147,8 @@ class HealthScreenState extends State<HealthScreen>
           const SizedBox(height: 16),
           _HealthSectionCard(
             title: 'İLAÇ TAKİBİ',
-            onAdd: () => _openMedicationSheet(),
-            child: _medicationsLoading
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      ),
-                    ),
-                  )
-                : _medicationsError != null
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            _medicationsError!,
-                            style: TextStyle(
-                              fontSize: 14,
-                              height: 1.35,
-                              color: HealthUi.muted.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: _loadMedications,
-                            child: const Text('Yeniden dene'),
-                          ),
-                        ],
-                      )
-                    : _sortedMedications.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(
-                              'Henüz ilaç kaydı yok. Sağ üstteki + ile ekleyin.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                height: 1.35,
-                                color: HealthUi.muted.withValues(alpha: 0.9),
-                              ),
-                            ),
-                          )
-                        : Column(
-                            children: [
-                              for (final (i, record)
-                                  in _sortedMedications.indexed) ...[
-                                if (i > 0)
-                                  Divider(
-                                    height: 1,
-                                    color: HealthUi.fieldBorder
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                _MedicationListTile(
-                                  record: record,
-                                  onTap: () => _openMedicationSheet(
-                                    mode: MedicationSheetMode.view,
-                                    existing: record,
-                                  ),
-                                  onEdit: () =>
-                                      _openMedicationSheet(
-                                    mode: MedicationSheetMode.edit,
-                                    existing: record,
-                                  ),
-                                  onDelete: () =>
-                                      _confirmDeleteMedication(record),
-                                ),
-                              ],
-                            ],
-                          ),
+            onAdd: _medicationsLoading ? () {} : () => _openMedicationSheet(),
+            child: _buildMedicationSection(),
           ),
         ],
       ),

@@ -41,9 +41,9 @@ class MedicationApiService {
     return '${d.year}-$m-$day';
   }
 
-  static Future<List<MedicationRecord>> fetchAll() async {
+  static Future<List<MedicationRecord>> fetchAll({int? catId}) async {
     final res = await http.get(
-      ApiConfig.medicationsUri(),
+      ApiConfig.medicationsUri(catId: catId),
       headers: _headers(),
     );
     final body = _decodeBody(res.body);

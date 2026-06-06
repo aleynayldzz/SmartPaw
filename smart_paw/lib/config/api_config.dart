@@ -49,7 +49,11 @@ class ApiConfig {
   static Uri vetVisitUri(int visitId) =>
       Uri.parse('$baseUrl/api/vet-visits/$visitId');
 
-  static Uri medicationsUri() => Uri.parse('$baseUrl/api/medications');
+  static Uri medicationsUri({int? catId}) {
+    final base = '$baseUrl/api/medications';
+    if (catId == null) return Uri.parse(base);
+    return Uri.parse(base).replace(queryParameters: {'cat_id': '$catId'});
+  }
 
   static Uri medicationUri(int medicationId) =>
       Uri.parse('$baseUrl/api/medications/$medicationId');

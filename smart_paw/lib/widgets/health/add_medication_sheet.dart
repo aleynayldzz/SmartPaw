@@ -15,12 +15,16 @@ class AddMedicationSheet extends StatefulWidget {
     required this.cats,
     this.initial,
     this.mode = MedicationSheetMode.create,
+    this.defaultCatId,
   });
 
   final List<VaccineCatOption> cats;
 
   final MedicationRecord? initial;
   final MedicationSheetMode mode;
+
+  /// Oluşturma modunda önceden seçili kedi (ilaç filtresinden gelir).
+  final int? defaultCatId;
 
   bool get readOnly => mode == MedicationSheetMode.view;
   bool get isEditing => mode == MedicationSheetMode.edit;
@@ -85,8 +89,10 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
       _frequency = _frequencyFromKey(ini.frequency);
       _startDate = ini.startDate;
       _endDate = ini.endDate;
+    } else if (widget.defaultCatId != null &&
+        widget.cats.any((c) => c.catId == widget.defaultCatId)) {
+      _catId = widget.defaultCatId;
     }
-    // Don't auto-select a cat; show "Kedi seçin" placeholder like vaccination flow.
   }
 
   @override

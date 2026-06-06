@@ -49,6 +49,17 @@ function parseCatId(value) {
   return { valid: true, value: id };
 }
 
+function parseCatIdQuery(value) {
+  if (value === undefined || value === null || value === "") {
+    return { valid: true, value: null };
+  }
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    return { valid: false, error: "cat_id must be a positive integer." };
+  }
+  return { valid: true, value: id };
+}
+
 function validateMedicationName(value) {
   if (!isNonEmptyString(value)) {
     return { valid: false, error: "İlaç adı zorunludur." };
@@ -148,11 +159,23 @@ function startOfIsoWeekUtc(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 
-async function listForUser(userId) {
+async function listForUser(userId, query = {}) {
   if (!pool) return { statusCode: 500, json: dbNotConfiguredPayload() };
 
-  const res = await pool.query(
-    `
+  const catParsed = parseCatIdQuery(query.cat_id);
+  if (!catParsed.valid) {
+    return { statusCode: 400, json: { ok: false, message: catParsed.error } };
+  }
+
+  if (catParsed.value != null) {
+    const cat = await assertCatOwner(userId, catParsed.value);
+    if (!cat) {
+      return { statusCode: 404, json: { ok: false, message: "Cat not found." } };
+    }
+  }
+
+  const params = [userId];
+  let sql = `
     SELECT
       m.medication_id,
       m.cat_id,
@@ -169,10 +192,16 @@ async function listForUser(userId) {
     FROM medications m
     INNER JOIN cats c ON c.cat_id = m.cat_id
     WHERE c.user_id = $1
-    ORDER BY m.created_at DESC, m.medication_id DESC
-    `,
-    [userId]
-  );
+  `;
+
+  if (catParsed.value != null) {
+    params.push(catParsed.value);
+    sql += ` AND m.cat_id = $${params.length}`;
+  }
+
+  sql += ` ORDER BY m.created_at DESC, m.medication_id DESC`;
+
+  const res = await pool.query(sql, params);
 
   return {
     statusCode: 200,
