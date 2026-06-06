@@ -321,11 +321,7 @@ class _DateTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.calendar_month_outlined,
-            size: 20,
-            color: HealthUi.accentPink,
-          ),
+          HealthUi.calendarIcon(size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

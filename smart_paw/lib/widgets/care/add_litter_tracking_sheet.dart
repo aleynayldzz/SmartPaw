@@ -166,11 +166,7 @@ class _AddLitterTrackingSheetState extends State<AddLitterTrackingSheet> {
                               ),
                             ),
                           ),
-                          Icon(
-                            Icons.calendar_today_outlined,
-                            size: 18,
-                            color: HealthUi.muted.withValues(alpha: 0.8),
-                          ),
+                          HealthUi.calendarIcon(size: 18),
                         ],
                       ),
                     ),

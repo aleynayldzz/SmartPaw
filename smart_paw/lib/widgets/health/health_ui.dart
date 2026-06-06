@@ -9,4 +9,13 @@ abstract final class HealthUi {
   static const muted = Color(0xFF6B6B6B);
   static const iconTileBg = Color(0xFFF0EEEB);
   static const fieldBorder = Color(0xFFE5DED8);
+
+  /// Tarih alanlarında kullanılan standart takvim ikonu.
+  static Widget calendarIcon({double size = 20}) {
+    return Icon(
+      Icons.event_outlined,
+      size: size,
+      color: accentPink,
+    );
+  }
 }
