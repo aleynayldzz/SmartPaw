@@ -1,12 +1,10 @@
 import 'package:flutter/foundation.dart';
 
-import '../models/health_record.dart';
 import '../models/weight_record.dart';
 import 'cat_api_service.dart';
-import 'vet_visit_api_service.dart';
+import 'weight_history_api_service.dart';
 
-/// Ağırlık geçmişi — yalnızca veteriner ziyareti kayıtlarından türetilir.
-/// Backend weight_history API hazır olunca bu katman değiştirilebilir.
+/// Ağırlık geçmişi — backend /api/weight-history üzerinden.
 class WeightHistoryService extends ChangeNotifier {
   WeightHistoryService._();
 
@@ -25,11 +23,7 @@ class WeightHistoryService extends ChangeNotifier {
       _sixMonthCutoff(now ?? DateTime.now());
 
   List<WeightRecord> recordsForCat(int catId) {
-    final all = _recordsByCat[catId] ?? const [];
-    final cutoff = _sixMonthCutoff(DateTime.now());
-    return all
-        .where((r) => !r.dateOnly.isBefore(cutoff))
-        .toList(growable: false);
+    return List.unmodifiable(_recordsByCat[catId] ?? const []);
   }
 
   static DateTime _sixMonthCutoff(DateTime now) {
@@ -45,17 +39,17 @@ class WeightHistoryService extends ChangeNotifier {
 
     try {
       final cats = await CatApiService.fetchMyCats();
-      final vetVisits = await VetVisitApiService.fetchAll();
+      final records = await WeightHistoryApiService.fetchAll(months: 6);
       _cats = _sortedCats(cats);
       _recordsByCat
         ..clear()
-        ..addAll(_buildRecordsByCat(vetVisits));
+        ..addAll(_buildRecordsByCat(records));
       _error = null;
     } on CatApiException catch (e) {
       _cats = [];
       _recordsByCat.clear();
       _error = e.message;
-    } on VetVisitApiException catch (e) {
+    } on WeightHistoryApiException catch (e) {
       _cats = [];
       _recordsByCat.clear();
       _error = e.message;
@@ -90,25 +84,12 @@ class WeightHistoryService extends ChangeNotifier {
   }
 
   static Map<int, List<WeightRecord>> _buildRecordsByCat(
-    List<VetAppointmentRecord> vetVisits,
+    List<WeightRecord> records,
   ) {
     final byCat = <int, List<WeightRecord>>{};
 
-    for (final visit in vetVisits) {
-      if (visit.weightKg <= 0) continue;
-      final day = DateTime(
-        visit.visitDate.year,
-        visit.visitDate.month,
-        visit.visitDate.day,
-      );
-      byCat.putIfAbsent(visit.catId, () => []).add(
-            WeightRecord(
-              id: visit.id,
-              catId: visit.catId,
-              weightKg: visit.weightKg,
-              recordedDate: day,
-            ),
-          );
+    for (final record in records) {
+      byCat.putIfAbsent(record.catId, () => []).add(record);
     }
 
     for (final entry in byCat.entries) {

@@ -70,4 +70,13 @@ class ApiConfig {
 
   static Uri litterTrackingCleaningUri(int litterId) =>
       Uri.parse('$baseUrl/api/litter-tracking/$litterId/cleaning');
+
+  static Uri weightHistoryUri({int? months, int? catId}) {
+    final params = <String, String>{};
+    if (months != null) params['months'] = months.toString();
+    if (catId != null) params['cat_id'] = catId.toString();
+    final base = Uri.parse('$baseUrl/api/weight-history');
+    if (params.isEmpty) return base;
+    return base.replace(queryParameters: params);
+  }
 }
