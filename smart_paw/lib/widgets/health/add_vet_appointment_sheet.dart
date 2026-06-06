@@ -251,11 +251,13 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
         id: widget.initial?.id,
         catId: _selectedCatId!,
         catName: _catLabel(_selectedCatId),
-        visitDate: visit,
+        visitDate: visitDay,
         reason: _selectedReason!,
         weightKg: _weightKg!,
         doctorNotes: notes,
-        nextVisitDate: next,
+        nextVisitDate: next != null
+            ? DateTime(next.year, next.month, next.day)
+            : null,
       ),
     );
   }

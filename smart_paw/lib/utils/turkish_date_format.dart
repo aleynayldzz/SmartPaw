@@ -1,3 +1,27 @@
+/// API'den gelen tarih — saat dilimi kayması olmadan takvim günü olarak parse edilir.
+DateTime? parseApiCalendarDate(dynamic value) {
+  if (value == null) return null;
+  final s = value.toString().trim();
+  if (s.isEmpty) return null;
+
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
+  if (m != null) {
+    return DateTime(
+      int.parse(m.group(1)!),
+      int.parse(m.group(2)!),
+      int.parse(m.group(3)!),
+    );
+  }
+
+  try {
+    final parsed = DateTime.parse(s);
+    final local = parsed.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  } catch (_) {
+    return null;
+  }
+}
+
 const _turkishMonths = <String>[
   'Ocak',
   'Şubat',

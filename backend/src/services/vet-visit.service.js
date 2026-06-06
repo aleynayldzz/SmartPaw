@@ -7,17 +7,38 @@ const DOCTOR_NOTES_MAX = 1000;
 const WEIGHT_MIN = 0.5;
 const WEIGHT_MAX = 25;
 
+function toDateOnlyString(value) {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(value).trim();
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  return m ? m[1] : s;
+}
+
+function calendarTodayString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function mapVetVisitRow(row) {
   if (!row) return null;
   return {
     visit_id: row.visit_id,
     cat_id: row.cat_id,
     cat_name: row.cat_name ?? undefined,
-    visit_date: row.visit_date,
+    visit_date: toDateOnlyString(row.visit_date),
     weight: row.weight != null ? Number(row.weight) : null,
     reason: row.reason,
     doctor_notes: row.doctor_notes ?? "",
-    next_visit_date: row.next_visit_date,
+    next_visit_date: toDateOnlyString(row.next_visit_date),
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -37,9 +58,7 @@ function parseDateOnly(value, { required = true, allowFuture = false } = {}) {
     return { valid: false, error: "Visit date is invalid." };
   }
   if (!allowFuture) {
-    const today = new Date();
-    today.setUTCHours(23, 59, 59, 999);
-    if (d.getTime() > today.getTime()) {
+    if (s > calendarTodayString()) {
       return { valid: false, error: "Visit date cannot be in the future." };
     }
   }

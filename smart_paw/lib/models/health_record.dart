@@ -1,3 +1,5 @@
+import '../utils/turkish_date_format.dart';
+
 // Sağlık sekmesi kayıt modelleri.
 
 class VaccineRecord {
@@ -21,13 +23,6 @@ class VaccineRecord {
   final bool reminderEnabled;
   final String notes;
 
-  static DateTime? _parseDate(dynamic value) {
-    if (value == null) return null;
-    final s = value.toString().trim();
-    if (s.isEmpty) return null;
-    return DateTime.parse(s.length <= 10 ? '${s}T12:00:00.000' : s);
-  }
-
   static int? _parseId(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -49,8 +44,8 @@ class VaccineRecord {
       catId: _parseId(json['cat_id']) ?? 0,
       catName: json['cat_name']?.toString(),
       name: json['vaccine_name']?.toString() ?? '',
-      vaccinationDate: _parseDate(json['vaccination_date'])!,
-      nextVaccinationDate: _parseDate(json['next_due_date']),
+      vaccinationDate: parseApiCalendarDate(json['vaccination_date'])!,
+      nextVaccinationDate: parseApiCalendarDate(json['next_due_date']),
       reminderEnabled: _parseBool(json['reminder_enabled']),
       notes: json['notes']?.toString() ?? '',
     );
@@ -87,13 +82,6 @@ class VetAppointmentRecord {
   final String doctorNotes;
   final DateTime? nextVisitDate;
 
-  static DateTime? _parseDate(dynamic value) {
-    if (value == null) return null;
-    final s = value.toString().trim();
-    if (s.isEmpty) return null;
-    return DateTime.parse(s.length <= 10 ? '${s}T12:00:00.000' : s);
-  }
-
   static int? _parseId(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -112,11 +100,11 @@ class VetAppointmentRecord {
       id: _parseId(json['visit_id']),
       catId: _parseId(json['cat_id']) ?? 0,
       catName: json['cat_name']?.toString(),
-      visitDate: _parseDate(json['visit_date'])!,
+      visitDate: parseApiCalendarDate(json['visit_date'])!,
       reason: json['reason']?.toString() ?? '',
       weightKg: _parseWeight(json['weight']),
       doctorNotes: json['doctor_notes']?.toString() ?? '',
-      nextVisitDate: _parseDate(json['next_visit_date']),
+      nextVisitDate: parseApiCalendarDate(json['next_visit_date']),
     );
   }
 
@@ -212,13 +200,6 @@ class MedicationRecord {
   // schedules are kept for backward compatibility; day-based tracking uses is_taken_today via schedule endpoint.
   final List<MedicationScheduleRecord> schedules;
 
-  static DateTime? _parseDate(dynamic value) {
-    if (value == null) return null;
-    final s = value.toString().trim();
-    if (s.isEmpty) return null;
-    return DateTime.parse(s.length <= 10 ? '${s}T12:00:00.000' : s);
-  }
-
   static int? _parseId(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -251,8 +232,8 @@ class MedicationRecord {
       name: json['medication_name']?.toString() ?? '',
       dosage: json['dosage']?.toString() ?? '',
       frequency: json['frequency']?.toString() ?? '',
-      startDate: _parseDate(json['start_date']) ?? DateTime.now(),
-      endDate: _parseDate(json['end_date']) ?? DateTime.now(),
+      startDate: parseApiCalendarDate(json['start_date']) ?? DateTime.now(),
+      endDate: parseApiCalendarDate(json['end_date']) ?? DateTime.now(),
       notes: json['notes']?.toString() ?? '',
       isActive: _parseBool(json['is_active']),
       schedules: schedules,

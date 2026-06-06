@@ -5,6 +5,7 @@ import '../services/cat_api_service.dart';
 import '../services/medication_api_service.dart';
 import '../services/vaccination_api_service.dart';
 import '../services/vet_visit_api_service.dart';
+import '../services/weight_history_service.dart';
 import '../utils/turkish_date_format.dart';
 import '../widgets/health/add_medication_sheet.dart';
 import '../widgets/health/add_vaccine_sheet.dart';
@@ -204,6 +205,7 @@ class HealthScreenState extends State<HealthScreen>
       }
       if (!mounted) return;
       await _loadVetVisits();
+      WeightHistoryService.instance.markDirty();
     } on VetVisitApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

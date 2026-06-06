@@ -7,6 +7,7 @@ import '../services/auth_session.dart';
 import '../services/daily_routine_api_service.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
+import 'analysis_screen.dart';
 import 'care_screen.dart';
 import 'health_screen.dart';
 import 'my_cats_screen.dart';
@@ -24,9 +25,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const int _healthTabIndex = 1;
+  static const int _analysisTabIndex = 3;
   static const int _profileTabIndex = 4;
 
   final _healthKey = GlobalKey<HealthScreenState>();
+  final _analysisKey = GlobalKey<AnalysisScreenState>();
 
   int _navIndex = 0;
 
@@ -215,7 +218,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _navIndex == _profileTabIndex ||
               _navIndex == 0 ||
               _navIndex == _healthTabIndex ||
-              _navIndex == 2
+              _navIndex == 2 ||
+              _navIndex == _analysisTabIndex
           ? null
           : AppBar(
               backgroundColor: Colors.transparent,
@@ -233,6 +237,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         onSelect: (i) {
           if (i == 0 && _navIndex != 0) {
             _loadDailyRoutine();
+          }
+          if (i == _analysisTabIndex) {
+            _analysisKey.currentState?.refresh();
           }
           setState(() => _navIndex = i);
         },
@@ -276,45 +283,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         _loadDailyRoutine();
                       },
                     ),
-                    const _NavPlaceholderTab(),
+                    AnalysisScreen(
+                      key: _analysisKey,
+                      onBackToHome: () {
+                        setState(() => _navIndex = 0);
+                        _loadDailyRoutine();
+                      },
+                    ),
                   ],
                 ),
               ),
             ),
-    );
-  }
-}
-
-class _NavPlaceholderTab extends StatelessWidget {
-  const _NavPlaceholderTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/images/patilogo.png',
-              height: 88,
-              fit: BoxFit.contain,
-            ),
-            const SizedBox(height: 28),
-            const Text(
-              'Akıllı bakım özellikleri burada geliştirilecek.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                height: 1.35,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF6B6B6B),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

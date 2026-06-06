@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/cat_breeds.dart';
 import '../models/cat_profile.dart';
 import '../services/cat_api_service.dart';
+import '../services/weight_history_service.dart';
 import '../widgets/health/health_ui.dart';
 
 const _kCreamBg = Color(0xFFFFF9F1);
@@ -600,6 +601,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
           widget.initial!.catId,
           _weightKg,
         );
+        WeightHistoryService.instance.markDirty();
         if (!mounted) return;
         Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
       } else {
@@ -611,6 +613,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
           weightKg: _weightKg,
           isNeutered: _isNeutered!,
         );
+        WeightHistoryService.instance.markDirty();
         if (!mounted) return;
         Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
       }
