@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../models/weekly_care_completion.dart';
 import '../models/weight_record.dart';
+import '../services/weekly_care_completion_service.dart';
 import '../services/weight_history_service.dart';
 import '../widgets/analysis/analysis_ui.dart';
+import '../widgets/analysis/weekly_care_completion_card.dart';
 import '../widgets/analysis/weight_history_card.dart';
 
 /// Analiz sekmesi — sağlık ve bakım verilerinin görselleştirilmesi.
@@ -20,6 +23,9 @@ class AnalysisScreenState extends State<AnalysisScreen>
   final _service = WeightHistoryService.instance;
 
   int? _selectedCatId;
+  WeeklyCareCompletion? _weeklyCare;
+  bool _weeklyCareLoading = true;
+  String? _weeklyCareError;
 
   @override
   bool get wantKeepAlive => true;
@@ -35,6 +41,7 @@ class AnalysisScreenState extends State<AnalysisScreen>
     } else {
       _ensureDefaultCat();
     }
+    _loadWeeklyCare();
   }
 
   @override
@@ -63,8 +70,45 @@ class AnalysisScreenState extends State<AnalysisScreen>
     }
   }
 
+  Future<void> _loadWeeklyCare() async {
+    if (mounted) {
+      setState(() {
+        _weeklyCareLoading = true;
+        _weeklyCareError = null;
+      });
+    }
+
+    try {
+      final data = await WeeklyCareCompletionService.fetchCurrentWeek();
+      if (!mounted) return;
+      setState(() {
+        _weeklyCare = data;
+        _weeklyCareLoading = false;
+        _weeklyCareError = null;
+      });
+    } on WeeklyCareCompletionException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _weeklyCareError = e.message;
+        _weeklyCareLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _weeklyCareError =
+            'Haftalık bakım analizi yüklenemedi. Lütfen tekrar deneyin.';
+        _weeklyCareLoading = false;
+      });
+    }
+  }
+
   /// Sekme görünür olduğunda veriyi yeniler.
-  Future<void> refresh() => _service.refresh();
+  Future<void> refresh() async {
+    await Future.wait([
+      _service.refresh(),
+      _loadWeeklyCare(),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +126,13 @@ class AnalysisScreenState extends State<AnalysisScreen>
         children: [
           _AnalysisPageHeader(onBack: widget.onBackToHome),
           const SizedBox(height: 12),
+          _WeeklyCareSection(
+            loading: _weeklyCareLoading,
+            error: _weeklyCareError,
+            data: _weeklyCare,
+            onRetry: _loadWeeklyCare,
+          ),
+          const SizedBox(height: 16),
           if (_service.isLoading && cats.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
@@ -104,6 +155,84 @@ class AnalysisScreenState extends State<AnalysisScreen>
               records: records,
               onCatSelected: (id) => setState(() => _selectedCatId = id),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeeklyCareSection extends StatelessWidget {
+  const _WeeklyCareSection({
+    required this.loading,
+    required this.error,
+    required this.data,
+    required this.onRetry,
+  });
+
+  final bool loading;
+  final String? error;
+  final WeeklyCareCompletion? data;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && data == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (error != null && data == null) {
+      return _InlineErrorCard(message: error!, onRetry: onRetry);
+    }
+
+    if (data == null) return const SizedBox.shrink();
+
+    return WeeklyCareCompletionCard(data: data!);
+  }
+}
+
+class _InlineErrorCard extends StatelessWidget {
+  const _InlineErrorCard({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AnalysisUi.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AnalysisUi.muted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(onPressed: onRetry, child: const Text('Yeniden dene')),
         ],
       ),
     );
