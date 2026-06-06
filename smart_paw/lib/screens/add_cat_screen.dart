@@ -11,7 +11,6 @@ import '../widgets/health/health_ui.dart';
 const _kCreamBg = Color(0xFFFFF9F1);
 const _kTitleColor = Color(0xFF3E3E3E);
 const _kAccentPink = Color(0xFFD88A92);
-const _kFieldBorder = Color(0xFF5C5C5C);
 
 class AddCatScreen extends StatefulWidget {
   const AddCatScreen({super.key, this.initial, this.knownCats});
@@ -32,7 +31,8 @@ class _AddCatScreenState extends State<AddCatScreen> {
   DateTime? _birth;
   bool? _isFemale;
   bool? _isNeutered;
-  double _weightKg = 4.0;
+  double? _weightKg;
+  String? _formError;
 
   List<CatBreedOption> _breedOptions = [];
   bool _breedsLoading = true;
@@ -158,14 +158,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
   }
 
   void _pickBreed(BuildContext context) {
-    if (_breedOptions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_breedsLoadError ?? 'Irk listesi boş.'),
-        ),
-      );
-      return;
-    }
+    if (_breedOptions.isEmpty) return;
     final searchCtrl = TextEditingController();
     showModalBottomSheet<void>(
       context: context,
@@ -430,9 +423,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
 
   Future<void> _pickBirth() async {
     final now = DateTime.now();
-    var temp =
-        (_birth ??
-            DateTime(now.year - 2, now.month, math.min(now.day, 28)));
+    var temp = _birth ?? DateTime(now.year, now.month, now.day);
 
     await showCupertinoModalPopup<void>(
       context: context,
@@ -508,7 +499,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
   }
 
   Future<void> _pickWeight(BuildContext parentContext) async {
-    final initial = _weightKg.clamp(
+    final initial = (_weightKg ?? 4.0).clamp(
       _HorizontalWeightPicker.minKg,
       _HorizontalWeightPicker.maxKg,
     );
@@ -548,46 +539,28 @@ class _AddCatScreenState extends State<AddCatScreen> {
     return null;
   }
 
+  bool _hasAllRequiredFields() {
+    return _breed?.breedId != null &&
+        _nameCtrl.text.trim().isNotEmpty &&
+        _birth != null &&
+        _isFemale != null &&
+        _isNeutered != null &&
+        _weightKg != null;
+  }
+
   bool _validate() {
-    if (_breed?.breedId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_breedsLoadError ?? 'Irk seçmek için ırkların yüklenmesi gerekir.'),
-        ),
-      );
+    if (!_hasAllRequiredFields()) {
+      setState(() => _formError = 'Zorunlu alanları doldurunuz.');
       return false;
     }
-    final ne = _nameError(_nameCtrl.text);
-    if (ne != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ne)));
+
+    final nameErr = _nameError(_nameCtrl.text);
+    if (nameErr != null) {
+      setState(() => _formError = nameErr);
       return false;
     }
-    if (_breed == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lütfen bir ırk seçin.')),
-      );
-      return false;
-    }
-    if (_birth == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Doğum tarihini seçin.')),
-      );
-      return false;
-    }
-    if (_isFemale == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cinsiyet seçin.')),
-      );
-      return false;
-    }
-    if (_isNeutered == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kısırlaştırma durumunu seçin.'),
-        ),
-      );
-      return false;
-    }
+
+    setState(() => _formError = null);
     return true;
   }
 
@@ -649,7 +622,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
       breedId: _breed!.breedId!,
       birthDateIso: _birthIso(_birth!),
       isFemale: _isFemale!,
-      weightKg: _weightKg,
+      weightKg: _weightKg!,
       isNeutered: _isNeutered!,
     );
 
@@ -773,6 +746,11 @@ class _AddCatScreenState extends State<AddCatScreen> {
                         controller: _nameCtrl,
                         maxLength: 30,
                         textInputAction: TextInputAction.next,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _kTitleColor,
+                        ),
                         decoration: _inputDecoration(
                           hintText: 'Kedinizin adı',
                           counterText: '',
@@ -783,7 +761,11 @@ class _AddCatScreenState extends State<AddCatScreen> {
                       label: 'Irk',
                       child: _SelectRow(
                         text: _breed?.labelTr ?? 'İrk seç',
-                        trailing: Icons.keyboard_arrow_down_rounded,
+                        trailing: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: _kTitleColor,
+                          size: 22,
+                        ),
                         onTap: () => _pickBreed(context),
                       ),
                     ),
@@ -797,7 +779,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                               text: _birth != null
                                   ? _formatBirth(_birth!)
                                   : 'Tarih seç',
-                              trailing: Icons.calendar_today_rounded,
+                              trailing: HealthUi.calendarIcon(size: 20),
                               dense: true,
                               onTap: _pickBirth,
                             ),
@@ -818,11 +800,17 @@ class _AddCatScreenState extends State<AddCatScreen> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        '${_weightKg.toStringAsFixed(1)} kg',
-                                        style: const TextStyle(
+                                        _weightKg != null
+                                            ? '${_weightKg!.toStringAsFixed(1)} kg'
+                                            : 'Kilo seçin',
+                                        style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                          color: _kTitleColor,
+                                          color: _weightKg != null
+                                              ? _kTitleColor
+                                              : HealthUi.muted.withValues(
+                                                  alpha: 0.7,
+                                                ),
                                         ),
                                       ),
                                     ),
@@ -847,7 +835,11 @@ class _AddCatScreenState extends State<AddCatScreen> {
                         text: _isFemale == null
                             ? 'Seç'
                             : (_isFemale! ? 'Kız' : 'Erkek'),
-                        trailing: Icons.keyboard_arrow_down_rounded,
+                        trailing: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: _kTitleColor,
+                          size: 22,
+                        ),
                         onTap: _pickGender,
                       ),
                     ),
@@ -857,7 +849,11 @@ class _AddCatScreenState extends State<AddCatScreen> {
                         text: _isNeutered == null
                             ? 'Seç'
                             : (_isNeutered! ? 'Kısır' : 'Kısır değil'),
-                        trailing: Icons.keyboard_arrow_down_rounded,
+                        trailing: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: _kTitleColor,
+                          size: 22,
+                        ),
                         onTap: _pickNeutered,
                       ),
                     ),
@@ -867,37 +863,53 @@ class _AddCatScreenState extends State<AddCatScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _kAccentPink,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    disabledBackgroundColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              child: Column(
+                children: [
+                  if (_formError != null) ...[
+                    Text(
+                      _formError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: HealthUi.accentPink,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  SizedBox(
+                    height: 52,
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saving ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _kAccentPink,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        disabledBackgroundColor: Colors.grey.shade400,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Kaydet',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 17,
+                              ),
+                            ),
                     ),
                   ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Kaydet',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 17,
-                          ),
-                        ),
-                ),
+                ],
               ),
             ),
           ],
@@ -906,9 +918,13 @@ class _AddCatScreenState extends State<AddCatScreen> {
     );
   }
 
-  OutlineInputBorder _outline() => OutlineInputBorder(
+  OutlineInputBorder _outline({Color? color, double width = 1}) =>
+      OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: _kFieldBorder),
+        borderSide: BorderSide(
+          color: color ?? HealthUi.fieldBorder,
+          width: width,
+        ),
       );
 
   InputDecoration _inputDecoration({
@@ -918,6 +934,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
   }) {
     return InputDecoration(
       hintText: hintText,
+      hintStyle: TextStyle(color: HealthUi.muted.withValues(alpha: 0.7)),
       counterText: counterText,
       filled: true,
       fillColor: fillMuted ? const Color(0xFFF0EEEB) : Colors.white,
@@ -927,7 +944,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
       ),
       border: _outline(),
       enabledBorder: _outline(),
-      focusedBorder: _outline(),
+      focusedBorder: _outline(color: HealthUi.accentPink, width: 1.5),
     );
   }
 }
@@ -973,7 +990,7 @@ class _SelectRow extends StatelessWidget {
   });
 
   final String text;
-  final IconData trailing;
+  final Widget trailing;
   final VoidCallback onTap;
   final bool dense;
 
@@ -992,7 +1009,7 @@ class _SelectRow extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _kFieldBorder),
+        border: Border.all(color: HealthUi.fieldBorder),
         color: Colors.white,
       ),
       child: Row(
@@ -1004,12 +1021,12 @@ class _SelectRow extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 fontSize: dense ? 14 : 15,
                 color: _placeholders.contains(text)
-                    ? Colors.grey.shade600
+                    ? HealthUi.muted.withValues(alpha: 0.7)
                     : _kTitleColor,
               ),
             ),
           ),
-          Icon(trailing, color: _kTitleColor, size: 22),
+          trailing,
         ],
       ),
     );
