@@ -54,4 +54,12 @@ class ApiConfig {
 
   static Uri medicationTakenUri(int medicationId) =>
       Uri.parse('$baseUrl/api/medications/$medicationId/taken');
+
+  static Uri foodTrackingUri() => Uri.parse('$baseUrl/api/food-tracking');
+
+  static Uri foodTrackingRecordUri(int foodId) =>
+      Uri.parse('$baseUrl/api/food-tracking/$foodId');
+
+  static Uri foodTrackingReplaceUri(int foodId) =>
+      Uri.parse('$baseUrl/api/food-tracking/$foodId/replace');
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/food_tracking_record.dart';
 import '../models/litter_tracking_record.dart';
-import '../services/food_tracking_local_store.dart';
+import '../services/food_tracking_api_service.dart';
 import '../services/litter_tracking_local_store.dart';
 import '../widgets/care/add_litter_tracking_sheet.dart';
 import '../widgets/care/food_tracking_card.dart';
@@ -21,10 +21,12 @@ class CareScreen extends StatefulWidget {
 
 class CareScreenState extends State<CareScreen>
     with AutomaticKeepAliveClientMixin {
-  final _foodStore = FoodTrackingLocalStore.instance;
   final _litterStore = LitterTrackingLocalStore.instance;
 
   FoodTrackingRecord? _foodRecord;
+  bool _foodLoading = true;
+  bool _foodSaving = false;
+  String? _foodError;
   LitterTrackingRecord? _litterRecord;
   bool _litterSaving = false;
 
@@ -34,15 +36,43 @@ class CareScreenState extends State<CareScreen>
   @override
   void initState() {
     super.initState();
-    _foodRecord = _foodStore.current;
     _litterRecord = _litterStore.current;
+    _loadFood();
   }
 
-  void _reload() {
-    setState(() {
-      _foodRecord = _foodStore.current;
-      _litterRecord = _litterStore.current;
-    });
+  Future<void> _loadFood() async {
+    if (mounted) {
+      setState(() {
+        _foodLoading = true;
+        _foodError = null;
+      });
+    }
+    try {
+      final record = await FoodTrackingApiService.fetchCurrent();
+      if (!mounted) return;
+      setState(() {
+        _foodRecord = record;
+        _foodLoading = false;
+        _foodError = null;
+      });
+    } on FoodTrackingApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _foodError = e.message;
+        _foodLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _foodError =
+            'Mama takibi yüklenemedi. Sunucunun çalıştığından emin olun.';
+        _foodLoading = false;
+      });
+    }
+  }
+
+  void _reloadLitter() {
+    setState(() => _litterRecord = _litterStore.current);
   }
 
   void _snack(String message) {
@@ -53,6 +83,8 @@ class CareScreenState extends State<CareScreen>
   }
 
   Future<void> _openFoodSheet() async {
+    if (_foodSaving || _foodLoading) return;
+
     final replacing = _foodRecord?.canAddNewPackage() ?? false;
     if (_foodRecord != null && !replacing) return;
 
@@ -66,26 +98,60 @@ class CareScreenState extends State<CareScreen>
     );
     if (draft == null || !mounted) return;
 
-    if (replacing) {
-      await _foodStore.replaceWithNewPackage(draft);
+    setState(() => _foodSaving = true);
+    try {
+      if (replacing) {
+        final foodId = _foodRecord?.id;
+        if (foodId == null) {
+          throw FoodTrackingApiException('Kayıt kimliği bulunamadı.');
+        }
+        final record = await FoodTrackingApiService.replace(
+          foodId: foodId,
+          draft: draft,
+        );
+        if (!mounted) return;
+        setState(() => _foodRecord = record);
+        _snack('Yeni mama paketi kaydedildi.');
+      } else {
+        final record = await FoodTrackingApiService.create(draft);
+        if (!mounted) return;
+        setState(() => _foodRecord = record);
+        _snack('Mama takibi kaydedildi.');
+      }
+    } on FoodTrackingApiException catch (e) {
       if (!mounted) return;
-      _reload();
-      _snack('Yeni mama paketi kaydedildi.');
-    } else {
-      await _foodStore.save(draft);
+      _snack(e.message);
+    } catch (_) {
       if (!mounted) return;
-      _reload();
+      _snack('Mama takibi kaydedilemedi. Sunucunun çalıştığından emin olun.');
+    } finally {
+      if (mounted) setState(() => _foodSaving = false);
     }
   }
 
   Future<void> _confirmDeleteFood() async {
+    if (_foodSaving || _foodRecord?.id == null) return;
+
     final yes = await _confirmDelete(
       'Mama takibi kaydını silmek istediğinize emin misiniz?',
     );
     if (yes != true || !mounted) return;
-    await _foodStore.delete();
-    if (!mounted) return;
-    _reload();
+
+    setState(() => _foodSaving = true);
+    try {
+      await FoodTrackingApiService.delete(_foodRecord!.id!);
+      if (!mounted) return;
+      setState(() => _foodRecord = null);
+      _snack('Mama takibi silindi.');
+    } on FoodTrackingApiException catch (e) {
+      if (!mounted) return;
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      _snack('Mama takibi silinemedi. Sunucunun çalıştığından emin olun.');
+    } finally {
+      if (mounted) setState(() => _foodSaving = false);
+    }
   }
 
   Future<void> _openLitterSheet() async {
@@ -100,7 +166,7 @@ class CareScreenState extends State<CareScreen>
     if (draft == null || !mounted) return;
     await _litterStore.save(draft);
     if (!mounted) return;
-    _reload();
+    _reloadLitter();
     _snack('Kum takibi kaydedildi.');
   }
 
@@ -135,7 +201,7 @@ class CareScreenState extends State<CareScreen>
     try {
       await _litterStore.saveCleaning();
       if (!mounted) return;
-      _reload();
+      _reloadLitter();
       _snack('Temizlik kaydedildi.');
     } catch (_) {
       if (!mounted) return;
@@ -152,7 +218,7 @@ class CareScreenState extends State<CareScreen>
     if (yes != true || !mounted) return;
     await _litterStore.delete();
     if (!mounted) return;
-    _reload();
+    _reloadLitter();
     _snack('Kum takibi silindi.');
   }
 
@@ -176,6 +242,73 @@ class CareScreenState extends State<CareScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFoodSection() {
+    if (_foodLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_foodError != null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Mama Takibi',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: HealthUi.titleInk,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _foodError!,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: HealthUi.muted.withValues(alpha: 0.9),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _foodSaving ? null : _loadFood,
+                child: const Text('Yeniden dene'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return FoodTrackingCard(
+      record: _foodRecord,
+      onAdd: _foodSaving ? () {} : _openFoodSheet,
+      onDelete: _foodRecord == null || _foodSaving ? () {} : _confirmDeleteFood,
     );
   }
 
@@ -213,11 +346,7 @@ class CareScreenState extends State<CareScreen>
             ),
           ),
           const SizedBox(height: 8),
-          FoodTrackingCard(
-            record: _foodRecord,
-            onAdd: _openFoodSheet,
-            onDelete: _foodRecord == null ? () {} : _confirmDeleteFood,
-          ),
+          _buildFoodSection(),
           const SizedBox(height: 16),
           LitterTrackingCard(
             record: _litterRecord,

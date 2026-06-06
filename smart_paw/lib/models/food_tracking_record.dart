@@ -1,5 +1,7 @@
 // Mama takibi modeli — açılış tarihinden itibaren günlük tüketimle hesaplanır.
 
+import '../utils/turkish_date_format.dart';
+
 enum FoodSupplyStatus { ok, warning, critical }
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -16,6 +18,28 @@ class FoodTrackingRecord {
   final DateTime openingDate;
   final double dailyFoodGrams;
   final double packageWeightKg;
+
+  static int? _parseId(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  static double _parseDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  factory FoodTrackingRecord.fromJson(Map<String, dynamic> json) {
+    return FoodTrackingRecord(
+      id: _parseId(json['food_id']),
+      openingDate:
+          parseApiCalendarDate(json['opening_date']) ?? DateTime.now(),
+      dailyFoodGrams: _parseDouble(json['daily_food_grams']),
+      packageWeightKg: _parseDouble(json['package_weight_kg']),
+    );
+  }
 
   double get packageGrams => packageWeightKg * 1000;
 

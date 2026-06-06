@@ -1,0 +1,571 @@
+const { pool, dbNotConfiguredPayload } = require("../db");
+const { isNonEmptyString } = require("../utils/validators");
+
+const DAILY_GRAMS_MIN = 1;
+const DAILY_GRAMS_MAX = 5000;
+const PACKAGE_KG_MIN = 0.01;
+const PACKAGE_KG_MAX = 50;
+
+function formatDateOnly(date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function todayDateOnly() {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0)
+  );
+}
+
+function parseOpeningDate(value, { allowFuture = false } = {}) {
+  if (!isNonEmptyString(value)) {
+    return { valid: false, error: "opening_date is required." };
+  }
+  const s = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return { valid: false, error: "opening_date must be YYYY-MM-DD." };
+  }
+  const d = new Date(`${s}T12:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) {
+    return { valid: false, error: "opening_date is invalid." };
+  }
+  if (!allowFuture) {
+    const today = todayDateOnly();
+    if (d.getTime() > today.getTime()) {
+      return { valid: false, error: "opening_date cannot be in the future." };
+    }
+  }
+  return { valid: true, value: s };
+}
+
+function parsePositiveDecimal(value, fieldName, { min, max }) {
+  if (value === undefined || value === null || value === "") {
+    return { valid: false, error: `${fieldName} is required.` };
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return { valid: false, error: `${fieldName} must be a number.` };
+  }
+  if (n < min || n > max) {
+    return {
+      valid: false,
+      error: `${fieldName} must be between ${min} and ${max}.`
+    };
+  }
+  return { valid: true, value: Math.round(n * 100) / 100 };
+}
+
+function daysElapsed(openingDateStr, referenceDateStr) {
+  const today = new Date(`${referenceDateStr}T12:00:00.000Z`);
+  const opened = new Date(`${openingDateStr}T12:00:00.000Z`);
+  const diff = Math.floor((today - opened) / (24 * 60 * 60 * 1000));
+  return Math.max(0, Math.min(diff, 99999));
+}
+
+function remainingGrams(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
+  const packageGrams = packageWeightKg * 1000;
+  if (packageGrams <= 0) return 0;
+  const consumed = daysElapsed(openingDateStr, ref) * dailyFoodGrams;
+  return Math.max(0, Math.min(packageGrams - consumed, packageGrams));
+}
+
+function remainingPercent(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
+  const packageGrams = packageWeightKg * 1000;
+  if (packageGrams <= 0) return 0;
+  return remainingGrams(packageWeightKg, dailyFoodGrams, openingDateStr, ref) / packageGrams;
+}
+
+function estimatedFinishDateStr(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
+  const today = new Date(`${ref}T12:00:00.000Z`);
+  const remaining = remainingGrams(
+    packageWeightKg,
+    dailyFoodGrams,
+    openingDateStr,
+    ref
+  );
+  if (dailyFoodGrams <= 0 || remaining <= 0) {
+    return ref;
+  }
+  const daysLeft = Math.ceil(remaining / dailyFoodGrams);
+  const finish = new Date(today);
+  finish.setUTCDate(finish.getUTCDate() + daysLeft);
+  return formatDateOnly(finish);
+}
+
+function daysUntilFinish(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
+  const finish = estimatedFinishDateStr(
+    packageWeightKg,
+    dailyFoodGrams,
+    openingDateStr,
+    ref
+  );
+  const today = new Date(`${ref}T12:00:00.000Z`);
+  const finishDate = new Date(`${finish}T12:00:00.000Z`);
+  return Math.floor((finishDate - today) / (24 * 60 * 60 * 1000));
+}
+
+function foodSupplyStatus(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
+  if (dailyFoodGrams <= 0) return "ok";
+  const days = daysUntilFinish(packageWeightKg, dailyFoodGrams, openingDateStr, ref);
+  const remaining = remainingGrams(
+    packageWeightKg,
+    dailyFoodGrams,
+    openingDateStr,
+    ref
+  );
+  if (days <= 0 || remaining <= 0) return "critical";
+  if (days >= 1 && days <= 7) return "warning";
+  return "ok";
+}
+
+function canAddNewPackage(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
+  if (dailyFoodGrams <= 0) return false;
+  return daysUntilFinish(packageWeightKg, dailyFoodGrams, openingDateStr, ref) <= 0;
+}
+
+function computeDerivedFields(row, referenceDateStr = formatDateOnly(todayDateOnly())) {
+  const packageWeightKg = Number(row.package_weight_kg);
+  const dailyFoodGrams = Number(row.daily_food_grams);
+  const openingDate = row.opening_date;
+  const remaining = remainingGrams(
+    packageWeightKg,
+    dailyFoodGrams,
+    openingDate,
+    referenceDateStr
+  );
+
+  return {
+    remaining_grams: Math.round(remaining * 100) / 100,
+    remaining_weight_kg: Math.round((remaining / 1000) * 1000) / 1000,
+    remaining_percent: Math.round(
+      remainingPercent(packageWeightKg, dailyFoodGrams, openingDate, referenceDateStr) * 10000
+    ) / 10000,
+    estimated_finish_date: estimatedFinishDateStr(
+      packageWeightKg,
+      dailyFoodGrams,
+      openingDate,
+      referenceDateStr
+    ),
+    days_until_finish: daysUntilFinish(
+      packageWeightKg,
+      dailyFoodGrams,
+      openingDate,
+      referenceDateStr
+    ),
+    status: foodSupplyStatus(
+      packageWeightKg,
+      dailyFoodGrams,
+      openingDate,
+      referenceDateStr
+    ),
+    can_add_new_package: canAddNewPackage(
+      packageWeightKg,
+      dailyFoodGrams,
+      openingDate,
+      referenceDateStr
+    )
+  };
+}
+
+function mapFoodTrackingRow(row) {
+  if (!row) return null;
+  const derived = computeDerivedFields(row);
+  return {
+    food_id: row.food_id,
+    opening_date: row.opening_date,
+    daily_food_grams: Number(row.daily_food_grams),
+    package_weight_kg: Number(row.package_weight_kg),
+    remaining_grams: derived.remaining_grams,
+    remaining_weight_kg: derived.remaining_weight_kg,
+    remaining_percent: derived.remaining_percent,
+    estimated_finish_date: derived.estimated_finish_date,
+    days_until_finish: derived.days_until_finish,
+    status: derived.status,
+    can_add_new_package: derived.can_add_new_package,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+const FOOD_SELECT = `
+  SELECT
+    food_id,
+    opening_date,
+    daily_food_grams,
+    package_weight_kg,
+    created_at,
+    updated_at
+  FROM food_tracking
+`;
+
+async function assertFoodOwner(userId, foodId) {
+  const r = await pool.query(
+    `${FOOD_SELECT} WHERE food_id = $1 AND user_id = $2`,
+    [foodId, userId]
+  );
+  return r.rows[0] ?? null;
+}
+
+async function getCurrentForUser(userId) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const res = await pool.query(
+    `${FOOD_SELECT} WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      data: {
+        food_tracking: res.rows[0] ? mapFoodTrackingRow(res.rows[0]) : null
+      }
+    }
+  };
+}
+
+async function getForUser(userId, foodIdRaw) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const foodId = Number(foodIdRaw);
+  if (!Number.isInteger(foodId) || foodId <= 0) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid food id." } };
+  }
+
+  const row = await assertFoodOwner(userId, foodId);
+  if (!row) {
+    return {
+      statusCode: 404,
+      json: { ok: false, message: "Food tracking record not found." }
+    };
+  }
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      data: { food_tracking: mapFoodTrackingRow(row) }
+    }
+  };
+}
+
+function parseCreateOrUpdateBody(body, { isReplace = false } = {}) {
+  const dailyParsed = parsePositiveDecimal(body?.daily_food_grams, "daily_food_grams", {
+    min: DAILY_GRAMS_MIN,
+    max: DAILY_GRAMS_MAX
+  });
+  if (!dailyParsed.valid) {
+    return {
+      error: { statusCode: 400, json: { ok: false, message: dailyParsed.error } }
+    };
+  }
+
+  const packageParsed = parsePositiveDecimal(body?.package_weight_kg, "package_weight_kg", {
+    min: PACKAGE_KG_MIN,
+    max: PACKAGE_KG_MAX
+  });
+  if (!packageParsed.valid) {
+    return {
+      error: { statusCode: 400, json: { ok: false, message: packageParsed.error } }
+    };
+  }
+
+  const openingParsed = parseOpeningDate(body?.opening_date, {
+    allowFuture: isReplace
+  });
+  if (!openingParsed.valid) {
+    return {
+      error: { statusCode: 400, json: { ok: false, message: openingParsed.error } }
+    };
+  }
+
+  if (isReplace) {
+    const opening = new Date(`${openingParsed.value}T12:00:00.000Z`);
+    const today = todayDateOnly();
+    if (opening.getTime() < today.getTime()) {
+      return {
+        error: {
+          statusCode: 400,
+          json: {
+            ok: false,
+            message: "opening_date for a new package cannot be in the past."
+          }
+        }
+      };
+    }
+  }
+
+  return {
+    value: {
+      dailyFoodGrams: dailyParsed.value,
+      packageWeightKg: packageParsed.value,
+      openingDate: openingParsed.value
+    }
+  };
+}
+
+async function createForUser(userId, body) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const parsed = parseCreateOrUpdateBody(body);
+  if (parsed.error) return parsed.error;
+
+  const { dailyFoodGrams, packageWeightKg, openingDate } = parsed.value;
+
+  const existing = await pool.query(
+    `SELECT food_id FROM food_tracking WHERE user_id = $1`,
+    [userId]
+  );
+  if (existing.rows.length > 0) {
+    return {
+      statusCode: 409,
+      json: {
+        ok: false,
+        message: "You already have an active food tracking record."
+      }
+    };
+  }
+
+  const today = formatDateOnly(todayDateOnly());
+  const derived = computeDerivedFields(
+    {
+      package_weight_kg: packageWeightKg,
+      daily_food_grams: dailyFoodGrams,
+      opening_date: openingDate
+    },
+    today
+  );
+
+  const insert = await pool.query(
+    `
+    INSERT INTO food_tracking (
+      user_id,
+      opening_date,
+      daily_food_grams,
+      package_weight_kg,
+      remaining_weight_kg,
+      last_updated,
+      estimated_finish_date
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
+              created_at, updated_at
+    `,
+    [
+      userId,
+      openingDate,
+      dailyFoodGrams,
+      packageWeightKg,
+      derived.remaining_weight_kg,
+      today,
+      derived.estimated_finish_date
+    ]
+  );
+
+  return {
+    statusCode: 201,
+    json: {
+      ok: true,
+      data: { food_tracking: mapFoodTrackingRow(insert.rows[0]) }
+    }
+  };
+}
+
+async function updateForUser(userId, foodIdRaw, body) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const foodId = Number(foodIdRaw);
+  if (!Number.isInteger(foodId) || foodId <= 0) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid food id." } };
+  }
+
+  const existing = await assertFoodOwner(userId, foodId);
+  if (!existing) {
+    return {
+      statusCode: 404,
+      json: { ok: false, message: "Food tracking record not found." }
+    };
+  }
+
+  const parsed = parseCreateOrUpdateBody(body);
+  if (parsed.error) return parsed.error;
+
+  const { dailyFoodGrams, packageWeightKg, openingDate } = parsed.value;
+  const today = formatDateOnly(todayDateOnly());
+  const derived = computeDerivedFields(
+    {
+      package_weight_kg: packageWeightKg,
+      daily_food_grams: dailyFoodGrams,
+      opening_date: openingDate
+    },
+    today
+  );
+
+  const updated = await pool.query(
+    `
+    UPDATE food_tracking
+    SET
+      opening_date = $1,
+      daily_food_grams = $2,
+      package_weight_kg = $3,
+      remaining_weight_kg = $4,
+      last_updated = $5,
+      estimated_finish_date = $6,
+      updated_at = NOW()
+    WHERE food_id = $7 AND user_id = $8
+    RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
+              created_at, updated_at
+    `,
+    [
+      openingDate,
+      dailyFoodGrams,
+      packageWeightKg,
+      derived.remaining_weight_kg,
+      today,
+      derived.estimated_finish_date,
+      foodId,
+      userId
+    ]
+  );
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      data: { food_tracking: mapFoodTrackingRow(updated.rows[0]) }
+    }
+  };
+}
+
+async function replacePackageForUser(userId, foodIdRaw, body) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const foodId = Number(foodIdRaw);
+  if (!Number.isInteger(foodId) || foodId <= 0) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid food id." } };
+  }
+
+  const current = await assertFoodOwner(userId, foodId);
+  if (!current) {
+    return {
+      statusCode: 404,
+      json: { ok: false, message: "Food tracking record not found." }
+    };
+  }
+
+  const today = formatDateOnly(todayDateOnly());
+  if (!canAddNewPackage(
+    Number(current.package_weight_kg),
+    Number(current.daily_food_grams),
+    current.opening_date,
+    today
+  )) {
+    return {
+      statusCode: 400,
+      json: {
+        ok: false,
+        message: "A new package can only be added when the current supply is depleted."
+      }
+    };
+  }
+
+  const parsed = parseCreateOrUpdateBody(body, { isReplace: true });
+  if (parsed.error) return parsed.error;
+
+  const { dailyFoodGrams, packageWeightKg, openingDate } = parsed.value;
+  const derived = computeDerivedFields(
+    {
+      package_weight_kg: packageWeightKg,
+      daily_food_grams: dailyFoodGrams,
+      opening_date: openingDate
+    },
+    today
+  );
+
+  const updated = await pool.query(
+    `
+    UPDATE food_tracking
+    SET
+      opening_date = $1,
+      daily_food_grams = $2,
+      package_weight_kg = $3,
+      remaining_weight_kg = $4,
+      last_updated = $5,
+      estimated_finish_date = $6,
+      updated_at = NOW()
+    WHERE food_id = $7 AND user_id = $8
+    RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
+              created_at, updated_at
+    `,
+    [
+      openingDate,
+      dailyFoodGrams,
+      packageWeightKg,
+      derived.remaining_weight_kg,
+      today,
+      derived.estimated_finish_date,
+      foodId,
+      userId
+    ]
+  );
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      data: { food_tracking: mapFoodTrackingRow(updated.rows[0]) }
+    }
+  };
+}
+
+async function deleteForUser(userId, foodIdRaw) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const foodId = Number(foodIdRaw);
+  if (!Number.isInteger(foodId) || foodId <= 0) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid food id." } };
+  }
+
+  const existing = await assertFoodOwner(userId, foodId);
+  if (!existing) {
+    return {
+      statusCode: 404,
+      json: { ok: false, message: "Food tracking record not found." }
+    };
+  }
+
+  await pool.query(`DELETE FROM food_tracking WHERE food_id = $1 AND user_id = $2`, [
+    foodId,
+    userId
+  ]);
+
+  return {
+    statusCode: 200,
+    json: { ok: true, data: { deleted: true } }
+  };
+}
+
+module.exports = {
+  getCurrentForUser,
+  getForUser,
+  createForUser,
+  updateForUser,
+  replacePackageForUser,
+  deleteForUser
+};
