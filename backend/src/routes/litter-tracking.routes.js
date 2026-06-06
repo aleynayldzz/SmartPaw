@@ -45,7 +45,8 @@ router.post("/:litterId/cleaning", requireAuth, (req, res) =>
     res,
     litterTrackingService.saveCleaningForUser(
       req.auth.userId,
-      req.params.litterId
+      req.params.litterId,
+      req.body
     )
   )
 );

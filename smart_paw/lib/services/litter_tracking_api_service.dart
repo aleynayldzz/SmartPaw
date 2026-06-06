@@ -107,9 +107,14 @@ class LitterTrackingApiService {
   }
 
   static Future<LitterTrackingRecord> saveCleaning(int litterId) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final res = await http.post(
       ApiConfig.litterTrackingCleaningUri(litterId),
       headers: _headers(),
+      body: jsonEncode({
+        'last_cleaning_date': _dateToIso(today),
+      }),
     );
     final body = _decodeBody(res.body);
     if (res.statusCode == 401) {

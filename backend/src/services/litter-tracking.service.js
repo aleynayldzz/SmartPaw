@@ -18,8 +18,15 @@ function todayDateOnly() {
   );
 }
 
-function parseLastCleaningDate(value) {
+function addDaysToDateString(dateStr, days) {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return formatDateOnly(d);
+}
+
+function parseCalendarDateString(value, { required = true, maxDateStr } = {}) {
   if (!isNonEmptyString(value)) {
+    if (!required) return { valid: true, value: null };
     return { valid: false, error: "last_cleaning_date is required." };
   }
   const s = value.trim();
@@ -30,14 +37,28 @@ function parseLastCleaningDate(value) {
   if (Number.isNaN(d.getTime())) {
     return { valid: false, error: "last_cleaning_date is invalid." };
   }
-  const today = todayDateOnly();
-  if (d.getTime() > today.getTime()) {
+  if (maxDateStr && s > maxDateStr) {
     return {
       valid: false,
       error: "last_cleaning_date cannot be in the future."
     };
   }
   return { valid: true, value: s };
+}
+
+function parseLastCleaningDate(value) {
+  return parseCalendarDateString(value, {
+    required: true,
+    maxDateStr: formatDateOnly(todayDateOnly())
+  });
+}
+
+function parseSaveCleaningDate(value) {
+  const maxDate = addDaysToDateString(formatDateOnly(todayDateOnly()), 1);
+  return parseCalendarDateString(value, {
+    required: true,
+    maxDateStr: maxDate
+  });
 }
 
 function parseFrequencyDays(value) {
@@ -331,7 +352,7 @@ async function updateForUser(userId, litterIdRaw, body) {
   };
 }
 
-async function saveCleaningForUser(userId, litterIdRaw) {
+async function saveCleaningForUser(userId, litterIdRaw, body = {}) {
   if (!pool) {
     return { statusCode: 500, json: dbNotConfiguredPayload() };
   }
@@ -352,7 +373,14 @@ async function saveCleaningForUser(userId, litterIdRaw) {
     };
   }
 
-  const today = formatDateOnly(todayDateOnly());
+  let cleaningDate = formatDateOnly(todayDateOnly());
+  if (isNonEmptyString(body?.last_cleaning_date)) {
+    const parsed = parseSaveCleaningDate(body.last_cleaning_date);
+    if (!parsed.valid) {
+      return { statusCode: 400, json: { ok: false, message: parsed.error } };
+    }
+    cleaningDate = parsed.value;
+  }
 
   const updated = await pool.query(
     `
@@ -361,9 +389,14 @@ async function saveCleaningForUser(userId, litterIdRaw) {
       last_cleaning_date = $1,
       updated_at = NOW()
     WHERE litter_id = $2 AND user_id = $3
-    RETURNING litter_id, last_cleaning_date, frequency_days, created_at, updated_at
+    RETURNING
+      litter_id,
+      to_char(last_cleaning_date, 'YYYY-MM-DD') AS last_cleaning_date,
+      frequency_days,
+      created_at,
+      updated_at
     `,
-    [today, litterId, userId]
+    [cleaningDate, litterId, userId]
   );
 
   return {
