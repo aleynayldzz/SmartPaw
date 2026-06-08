@@ -72,7 +72,47 @@ async function sendVerificationEmail({ toEmail, code, expiresAt }) {
   });
 }
 
+async function sendPasswordResetEmail({ toEmail, code, expiresAt }) {
+  const transport = createMailTransport();
+  if (!transport) {
+    const err = new Error("SMTP is not configured");
+    err.code = "SMTP_NOT_CONFIGURED";
+    throw err;
+  }
+
+  const from = String(process.env.SMTP_FROM).trim();
+  const subject = "SmartPaw password reset code";
+
+  const text = [
+    "Your SmartPaw password reset code is:",
+    "",
+    code,
+    "",
+    `This code expires at: ${expiresAt.toISOString()}`,
+    "",
+    "If you did not request a password reset, you can ignore this email."
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;color:#111">
+      <p>Your SmartPaw password reset code is:</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
+      <p style="color:#444">This code expires at: <strong>${expiresAt.toISOString()}</strong></p>
+      <p style="color:#444">If you did not request a password reset, you can ignore this email.</p>
+    </div>
+  `;
+
+  await transport.sendMail({
+    from,
+    to: toEmail,
+    subject,
+    text,
+    html
+  });
+}
+
 module.exports = {
   hasSmtpConfig,
-  sendVerificationEmail
+  sendVerificationEmail,
+  sendPasswordResetEmail
 };

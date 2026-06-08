@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_session.dart';
+import 'change_password_screen.dart';
 import 'login_screen.dart';
 import 'my_cats_screen.dart';
 
@@ -108,7 +109,14 @@ class ProfileScreen extends StatelessWidget {
                             _ProfileTile(
                               icon: Icons.lock_outline_rounded,
                               label: 'Şifreyi Değiştir',
-                              onTap: () {},
+                              onTap: () {
+                                Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const ChangePasswordScreen(),
+                                  ),
+                                );
+                              },
                             ),
                             _ProfileTile(
                               icon: Icons.logout_rounded,

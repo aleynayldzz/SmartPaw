@@ -25,6 +25,17 @@ class ApiConfig {
 
   static Uri verifyEmailUri() => Uri.parse('$baseUrl/api/auth/verify-email');
 
+  static Uri forgotPasswordUri() =>
+      Uri.parse('$baseUrl/api/auth/forgot-password');
+
+  static Uri verifyResetCodeUri() =>
+      Uri.parse('$baseUrl/api/auth/verify-reset-code');
+
+  static Uri resetPasswordUri() => Uri.parse('$baseUrl/api/auth/reset-password');
+
+  static Uri changePasswordUri() =>
+      Uri.parse('$baseUrl/api/auth/change-password');
+
   static Uri catBreedsUri() => Uri.parse('$baseUrl/api/cats/breeds');
 
   static Uri catsUri() => Uri.parse('$baseUrl/api/cats');

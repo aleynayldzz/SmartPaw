@@ -31,8 +31,16 @@ router.post("/forgot-password", (req, res) =>
   respond(res, authService.forgotPassword(req.body))
 );
 
+router.post("/verify-reset-code", (req, res) =>
+  respond(res, authService.verifyResetCode(req.body))
+);
+
 router.post("/reset-password", (req, res) =>
   respond(res, authService.resetPassword(req.body))
+);
+
+router.post("/change-password", requireAuth, (req, res) =>
+  respond(res, authService.changePassword(req.auth.userId, req.body))
 );
 
 module.exports = router;

@@ -1,28 +1,22 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../config/api_config.dart';
+import '../services/auth_api_service.dart';
 import '../utils/password_validation.dart';
-import 'verification_screen.dart';
-import 'welcome_screen.dart';
 
-class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+class ChangePasswordScreen extends StatefulWidget {
+  const ChangePasswordScreen({super.key});
 
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
-  final _nameController = TextEditingController();
-  final _surnameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _obscurePassword = true;
+  bool _obscureCurrentPassword = true;
+  bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSubmitting = false;
 
@@ -32,10 +26,8 @@ class _SignupScreenState extends State<SignupScreen> {
   void initState() {
     super.initState();
     for (final controller in [
-      _nameController,
-      _surnameController,
-      _emailController,
-      _passwordController,
+      _currentPasswordController,
+      _newPasswordController,
       _confirmPasswordController,
     ]) {
       controller.addListener(_handleFieldChange);
@@ -44,19 +36,15 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _surnameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
   bool get _allFieldsFilled {
-    return _nameController.text.trim().isNotEmpty &&
-        _surnameController.text.trim().isNotEmpty &&
-        _emailController.text.trim().isNotEmpty &&
-        _passwordController.text.isNotEmpty &&
+    return _currentPasswordController.text.isNotEmpty &&
+        _newPasswordController.text.isNotEmpty &&
         _confirmPasswordController.text.isNotEmpty;
   }
 
@@ -72,10 +60,12 @@ class _SignupScreenState extends State<SignupScreen> {
       return 'Bir hata oluştu. Lütfen tekrar deneyin.';
     }
     return switch (message.trim()) {
+      'Current password is incorrect.' => 'Mevcut şifre hatalı.',
       'Password must be at least 8 characters long and include uppercase, lowercase, and a special character.' =>
         PasswordValidation.formatHint,
       'Confirm Password must match Password.' => 'Şifreler eşleşmiyor.',
-      'Email format is invalid.' => 'Geçerli bir e-posta adresi girin.',
+      'Unauthorized. Sign in with a valid access token.' =>
+        'Oturum süresi dolmuş. Lütfen tekrar giriş yapın.',
       _ => message.trim(),
     };
   }
@@ -84,25 +74,17 @@ class _SignupScreenState extends State<SignupScreen> {
     FocusScope.of(context).unfocus();
     if (!_allFieldsFilled || _isSubmitting) return;
 
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
+    final newPassword = _newPasswordController.text;
     final confirmPassword = _confirmPasswordController.text;
 
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      setState(() {
-        _submitWarning = 'Geçerli bir e-posta adresi girin.';
-      });
-      return;
-    }
-
-    if (!PasswordValidation.isValid(password)) {
+    if (!PasswordValidation.isValid(newPassword)) {
       setState(() {
         _submitWarning = PasswordValidation.formatHint;
       });
       return;
     }
 
-    if (confirmPassword != password) {
+    if (confirmPassword != newPassword) {
       setState(() {
         _submitWarning = 'Şifreler eşleşmiyor.';
       });
@@ -115,53 +97,29 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
-      final response = await http.post(
-        ApiConfig.signupUri(),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': _nameController.text.trim(),
-          'surname': _surnameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'password': _passwordController.text,
-          'confirmPassword': _confirmPasswordController.text,
-        }),
+      final result = await AuthApiService.changePassword(
+        currentPassword: _currentPasswordController.text,
+        newPassword: newPassword,
+        confirmPassword: confirmPassword,
       );
-
-      final Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
 
       if (!mounted) return;
 
-      if (response.statusCode == 201) {
+      if (result.ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful. Please verify your email.'),
-          ),
+          const SnackBar(content: Text('Şifreniz başarıyla güncellendi.')),
         );
-
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                VerificationScreen(email: _emailController.text.trim()),
-          ),
-        );
+        Navigator.of(context).pop();
         return;
       }
 
-      final errors = (body['errors'] as Map?)?.cast<String, dynamic>() ?? {};
-      final rawWarning = errors['password']?.toString() ??
-          errors['confirmPassword']?.toString() ??
-          errors['email']?.toString() ??
-          body['message']?.toString();
+      final rawWarning = result.fieldErrors['newPassword'] ??
+          result.fieldErrors['confirmPassword'] ??
+          result.fieldErrors['currentPassword'] ??
+          result.message;
 
       setState(() {
         _submitWarning = _normalizeMessage(rawWarning);
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _submitWarning =
-            'Sunucuya bağlanılamadı. Backend\'in çalıştığından emin olun.';
       });
     } finally {
       if (mounted) {
@@ -226,7 +184,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       children: [
                         const SizedBox(height: 8),
                         const Text(
-                          'Kayıt Ol',
+                          'Şifreyi Değiştir',
                           style: TextStyle(
                             fontSize: 34,
                             height: 1.05,
@@ -235,40 +193,56 @@ class _SignupScreenState extends State<SignupScreen> {
                             letterSpacing: -0.6,
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Mevcut şifrenizi girin ve yeni şifrenizi belirleyin.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.45,
+                            color: Color(0xFF6B6B6B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         const SizedBox(height: 22),
                         TextField(
-                          controller: _nameController,
-                          textInputAction: TextInputAction.next,
-                          decoration: _decoration(hintText: 'Ad'),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: _surnameController,
-                          textInputAction: TextInputAction.next,
-                          decoration: _decoration(hintText: 'Soyad'),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          decoration: _decoration(hintText: 'E-posta'),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
+                          controller: _currentPasswordController,
+                          obscureText: _obscureCurrentPassword,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(
-                            hintText: 'Şifre',
+                            hintText: 'Mevcut Şifre',
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(
-                                  () => _obscurePassword = !_obscurePassword,
+                                  () => _obscureCurrentPassword =
+                                      !_obscureCurrentPassword,
                                 );
                               },
                               icon: Icon(
-                                _obscurePassword
+                                _obscureCurrentPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                                color: const Color(0xFF6B6B6B),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _newPasswordController,
+                          obscureText: _obscureNewPassword,
+                          textInputAction: TextInputAction.next,
+                          decoration: _decoration(
+                            hintText: 'Yeni Şifre',
+                            suffixIcon: IconButton(
+                              onPressed: () {
+                                setState(
+                                  () =>
+                                      _obscureNewPassword = !_obscureNewPassword,
+                                );
+                              },
+                              icon: Icon(
+                                _obscureNewPassword
                                     ? Icons.visibility_off
                                     : Icons.visibility,
                                 color: const Color(0xFF6B6B6B),
@@ -287,7 +261,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             }
                           },
                           decoration: _decoration(
-                            hintText: 'Şifreyi Onayla',
+                            hintText: 'Yeni Şifre Tekrar',
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(
@@ -346,7 +320,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                       ),
                                     )
                                   : const Text(
-                                      'Hesap Oluştur',
+                                      'Şifreyi Güncelle',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
@@ -366,14 +340,7 @@ class _SignupScreenState extends State<SignupScreen> {
               left: 4,
               child: IconButton(
                 tooltip: 'Geri',
-                onPressed: () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const WelcomeScreen(),
-                    ),
-                    (route) => false,
-                  );
-                },
+                onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(
                   Icons.arrow_back_ios_new_rounded,
                   color: titleColor,

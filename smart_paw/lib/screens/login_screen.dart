@@ -58,13 +58,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _normalizeMessage(String? message) {
     if (message == null || message.isEmpty) {
-      return 'Something went wrong. Please try again.';
+      return 'Bir hata oluştu. Lütfen tekrar deneyin.';
     }
-    final trimmed = message.trim();
-    if (trimmed == 'Email or password is incorrect.') {
-      return 'Email or password is incorrect';
-    }
-    return trimmed;
+    return switch (message.trim()) {
+      'Email or password is incorrect.' ||
+      'Email or password is incorrect' =>
+        'E-posta veya şifre hatalı.',
+      'Account not found' => 'Bu e-posta adresiyle kayıtlı hesap bulunamadı.',
+      'Password cannot be empty' => 'Şifre gerekli.',
+      'Please enter a valid email address' => 'Geçerli bir e-posta adresi girin.',
+      'Validation failed.' => 'Lütfen bilgilerinizi kontrol edin.',
+      _ => message.trim(),
+    };
   }
 
   Future<void> _submit() async {
@@ -108,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         } on FormatException {
           setState(() {
-            _generalError = 'Something went wrong. Please try again.';
+            _generalError = 'Bir hata oluştu. Lütfen tekrar deneyin.';
           });
           return;
         }
@@ -120,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
             data?['accessToken']?.toString() ?? data?['token']?.toString();
         if (accessToken == null || accessToken.isEmpty) {
           setState(() {
-            _generalError = 'Something went wrong. Please try again.';
+            _generalError = 'Bir hata oluştu. Lütfen tekrar deneyin.';
           });
           return;
         }
@@ -153,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _generalError =
-            'Could not connect to the server. Check that the backend is running.';
+            'Sunucuya bağlanılamadı. Backend\'in çalıştığından emin olun.';
       });
     } finally {
       if (mounted) {

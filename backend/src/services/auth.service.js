@@ -1,7 +1,7 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { pool, dbNotConfiguredPayload } = require("../db");
-const { sendVerificationEmail } = require("./email.service");
+const { sendVerificationEmail, sendPasswordResetEmail } = require("./email.service");
 const {
   isNonEmptyString,
   isValidEmail,
@@ -394,6 +394,30 @@ async function login(body) {
   };
 }
 
+async function findValidPasswordResetCode(userId, code) {
+  const now = new Date();
+  const verificationRes = await pool.query(
+    `
+      SELECT code_id, code, expires_at, is_used
+      FROM verification_codes
+      WHERE user_id = $1
+        AND purpose = 'password_reset'
+        AND is_used = false
+        AND expires_at > $2
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+    [userId, now]
+  );
+  const verificationRow = verificationRes.rows[0];
+
+  if (!verificationRow || String(verificationRow.code) !== String(code).trim()) {
+    return null;
+  }
+
+  return verificationRow;
+}
+
 async function forgotPassword(body) {
   if (!pool) {
     return { statusCode: 500, json: dbNotConfiguredPayload() };
@@ -416,7 +440,7 @@ async function forgotPassword(body) {
   const normalizedEmail = email.trim().toLowerCase();
 
   const userRes = await pool.query(
-    `SELECT user_id FROM users WHERE lower(email) = $1 LIMIT 1`,
+    `SELECT user_id, email FROM users WHERE lower(email) = $1 LIMIT 1`,
     [normalizedEmail]
   );
   const user = userRes.rows[0];
@@ -436,6 +460,36 @@ async function forgotPassword(body) {
     [user.user_id, code, expiresAt]
   );
 
+  try {
+    await sendPasswordResetEmail({
+      toEmail: user.email,
+      code,
+      expiresAt
+    });
+  } catch (mailErr) {
+    console.error(mailErr);
+
+    if (mailErr && mailErr.code === "SMTP_NOT_CONFIGURED") {
+      return {
+        statusCode: 500,
+        json: {
+          ok: false,
+          message:
+            "Email delivery is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend/.env."
+        }
+      };
+    }
+
+    return {
+      statusCode: 500,
+      json: {
+        ok: false,
+        message:
+          "We could not send the password reset email. Please check SMTP settings and try again."
+      }
+    };
+  }
+
   const payload = {
     ok: true,
     message: "Password reset code sent. Check your email.",
@@ -447,6 +501,60 @@ async function forgotPassword(body) {
   }
 
   return { statusCode: 200, json: payload };
+}
+
+async function verifyResetCode(body) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const { email, code } = body ?? {};
+  const errors = {};
+
+  if (!isNonEmptyString(email) || !isValidEmail(email)) {
+    errors.email = "Please enter a valid email address";
+  }
+  if (!isNonEmptyString(code)) {
+    errors.code = "Reset code is required.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { statusCode: 400, json: { ok: false, message: "Validation failed.", errors } };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const userRes = await pool.query(
+    `SELECT user_id FROM users WHERE lower(email) = $1 LIMIT 1`,
+    [normalizedEmail]
+  );
+  const user = userRes.rows[0];
+
+  if (!user) {
+    return { statusCode: 404, json: { ok: false, message: "Account not found" } };
+  }
+
+  const verificationRow = await findValidPasswordResetCode(user.user_id, code);
+
+  if (!verificationRow) {
+    return {
+      statusCode: 400,
+      json: {
+        ok: false,
+        message: "Invalid or expired reset code.",
+        errors: { code: "Invalid or expired reset code." }
+      }
+    };
+  }
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      message: "Reset code verified.",
+      data: { next: "set_new_password" }
+    }
+  };
 }
 
 async function resetPassword(body) {
@@ -489,23 +597,9 @@ async function resetPassword(body) {
     return { statusCode: 404, json: { ok: false, message: "Account not found" } };
   }
 
-  const now = new Date();
-  const verificationRes = await pool.query(
-    `
-      SELECT code_id, code, expires_at, is_used
-      FROM verification_codes
-      WHERE user_id = $1
-        AND purpose = 'password_reset'
-        AND is_used = false
-        AND expires_at > $2
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
-    [user.user_id, now]
-  );
-  const verificationRow = verificationRes.rows[0];
+  const verificationRow = await findValidPasswordResetCode(user.user_id, code);
 
-  if (!verificationRow || String(verificationRow.code) !== String(code).trim()) {
+  if (!verificationRow) {
     return {
       statusCode: 400,
       json: {
@@ -546,6 +640,78 @@ async function resetPassword(body) {
   };
 }
 
+async function changePassword(userId, body) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const { currentPassword, newPassword, confirmPassword } = body ?? {};
+  const errors = {};
+
+  if (!isNonEmptyString(currentPassword)) {
+    errors.currentPassword = "Current password is required.";
+  }
+
+  if (!isNonEmptyString(newPassword)) {
+    errors.newPassword = "New password is required.";
+  } else if (!isValidPassword(newPassword)) {
+    errors.newPassword =
+      "Password must be at least 8 characters long and include uppercase, lowercase, and a special character.";
+  }
+
+  if (!isNonEmptyString(confirmPassword)) {
+    errors.confirmPassword = "Confirm Password is required.";
+  } else if (newPassword !== confirmPassword) {
+    errors.confirmPassword = "Confirm Password must match Password.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { statusCode: 400, json: { ok: false, message: "Validation failed.", errors } };
+  }
+
+  const uid = Number(userId);
+  if (!Number.isFinite(uid) || uid <= 0) {
+    return { statusCode: 400, json: { ok: false, message: "Invalid user." } };
+  }
+
+  const userRes = await pool.query(
+    `SELECT user_id, password_hash FROM users WHERE user_id = $1 LIMIT 1`,
+    [uid]
+  );
+  const user = userRes.rows[0];
+
+  if (!user) {
+    return { statusCode: 404, json: { ok: false, message: "User not found." } };
+  }
+
+  const currentOk = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!currentOk) {
+    return {
+      statusCode: 401,
+      json: {
+        ok: false,
+        message: "Current password is incorrect.",
+        errors: { currentPassword: "Current password is incorrect." }
+      }
+    };
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  await pool.query(`UPDATE users SET password_hash = $1 WHERE user_id = $2`, [
+    passwordHash,
+    user.user_id
+  ]);
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      message: "Password updated successfully."
+    }
+  };
+}
+
 /**
  * `Authorization: Bearer <accessToken>` başlığından kullanıcıyı döndürür; geçersizse null.
  */
@@ -569,7 +735,9 @@ module.exports = {
   verifyEmail,
   login,
   forgotPassword,
+  verifyResetCode,
   resetPassword,
+  changePassword,
   verifyAccessToken,
   getMe
 };

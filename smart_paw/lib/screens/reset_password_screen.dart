@@ -5,20 +5,23 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../utils/password_validation.dart';
-import 'verification_screen.dart';
-import 'welcome_screen.dart';
+import 'login_screen.dart';
 
-class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+class ResetPasswordScreen extends StatefulWidget {
+  const ResetPasswordScreen({
+    super.key,
+    required this.email,
+    required this.code,
+  });
+
+  final String email;
+  final String code;
 
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
-  final _nameController = TextEditingController();
-  final _surnameController = TextEditingController();
-  final _emailController = TextEditingController();
+class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -31,32 +34,19 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   void initState() {
     super.initState();
-    for (final controller in [
-      _nameController,
-      _surnameController,
-      _emailController,
-      _passwordController,
-      _confirmPasswordController,
-    ]) {
-      controller.addListener(_handleFieldChange);
-    }
+    _passwordController.addListener(_handleFieldChange);
+    _confirmPasswordController.addListener(_handleFieldChange);
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _surnameController.dispose();
-    _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
   bool get _allFieldsFilled {
-    return _nameController.text.trim().isNotEmpty &&
-        _surnameController.text.trim().isNotEmpty &&
-        _emailController.text.trim().isNotEmpty &&
-        _passwordController.text.isNotEmpty &&
+    return _passwordController.text.isNotEmpty &&
         _confirmPasswordController.text.isNotEmpty;
   }
 
@@ -72,10 +62,10 @@ class _SignupScreenState extends State<SignupScreen> {
       return 'Bir hata oluştu. Lütfen tekrar deneyin.';
     }
     return switch (message.trim()) {
+      'Invalid or expired reset code.' => 'Kod geçersiz veya süresi dolmuş.',
       'Password must be at least 8 characters long and include uppercase, lowercase, and a special character.' =>
         PasswordValidation.formatHint,
       'Confirm Password must match Password.' => 'Şifreler eşleşmiyor.',
-      'Email format is invalid.' => 'Geçerli bir e-posta adresi girin.',
       _ => message.trim(),
     };
   }
@@ -84,16 +74,8 @@ class _SignupScreenState extends State<SignupScreen> {
     FocusScope.of(context).unfocus();
     if (!_allFieldsFilled || _isSubmitting) return;
 
-    final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
-
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      setState(() {
-        _submitWarning = 'Geçerli bir e-posta adresi girin.';
-      });
-      return;
-    }
 
     if (!PasswordValidation.isValid(password)) {
       setState(() {
@@ -116,34 +98,41 @@ class _SignupScreenState extends State<SignupScreen> {
 
     try {
       final response = await http.post(
-        ApiConfig.signupUri(),
+        ApiConfig.resetPasswordUri(),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'name': _nameController.text.trim(),
-          'surname': _surnameController.text.trim(),
-          'email': _emailController.text.trim(),
+          'email': widget.email.trim(),
+          'code': widget.code,
           'password': _passwordController.text,
           'confirmPassword': _confirmPasswordController.text,
         }),
       );
 
-      final Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
-
       if (!mounted) return;
 
-      if (response.statusCode == 201) {
+      Map<String, dynamic> body = {};
+      if (response.body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic>) {
+            body = decoded;
+          }
+        } on FormatException {
+          setState(() {
+            _submitWarning = 'Bir hata oluştu. Lütfen tekrar deneyin.';
+          });
+          return;
+        }
+      }
+
+      if (response.statusCode == 200 && body['ok'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful. Please verify your email.'),
-          ),
+          const SnackBar(content: Text('Şifreniz başarıyla güncellendi.')),
         );
 
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                VerificationScreen(email: _emailController.text.trim()),
-          ),
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+          (route) => false,
         );
         return;
       }
@@ -151,7 +140,6 @@ class _SignupScreenState extends State<SignupScreen> {
       final errors = (body['errors'] as Map?)?.cast<String, dynamic>() ?? {};
       final rawWarning = errors['password']?.toString() ??
           errors['confirmPassword']?.toString() ??
-          errors['email']?.toString() ??
           body['message']?.toString();
 
       setState(() {
@@ -226,7 +214,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       children: [
                         const SizedBox(height: 8),
                         const Text(
-                          'Kayıt Ol',
+                          'Yeni Şifre Belirle',
                           style: TextStyle(
                             fontSize: 34,
                             height: 1.05,
@@ -235,32 +223,24 @@ class _SignupScreenState extends State<SignupScreen> {
                             letterSpacing: -0.6,
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Yeni şifrenizi girin ve tekrar onaylayın.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.45,
+                            color: Color(0xFF6B6B6B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         const SizedBox(height: 22),
-                        TextField(
-                          controller: _nameController,
-                          textInputAction: TextInputAction.next,
-                          decoration: _decoration(hintText: 'Ad'),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: _surnameController,
-                          textInputAction: TextInputAction.next,
-                          decoration: _decoration(hintText: 'Soyad'),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          decoration: _decoration(hintText: 'E-posta'),
-                        ),
-                        const SizedBox(height: 14),
                         TextField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(
-                            hintText: 'Şifre',
+                            hintText: 'Yeni Şifre',
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(
@@ -287,7 +267,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             }
                           },
                           decoration: _decoration(
-                            hintText: 'Şifreyi Onayla',
+                            hintText: 'Yeni Şifre Tekrar',
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(
@@ -346,7 +326,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                       ),
                                     )
                                   : const Text(
-                                      'Hesap Oluştur',
+                                      'Şifreyi Güncelle',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
@@ -358,25 +338,6 @@ class _SignupScreenState extends State<SignupScreen> {
                       ],
                     ),
                   ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 4,
-              left: 4,
-              child: IconButton(
-                tooltip: 'Geri',
-                onPressed: () {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const WelcomeScreen(),
-                    ),
-                    (route) => false,
-                  );
-                },
-                icon: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  color: titleColor,
                 ),
               ),
             ),
