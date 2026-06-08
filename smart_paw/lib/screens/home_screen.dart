@@ -6,6 +6,7 @@ import '../models/cat_profile.dart';
 import '../services/auth_api_service.dart';
 import '../services/auth_session.dart';
 import '../services/daily_routine_api_service.dart';
+import '../widgets/daily_care_celebration_overlay.dart';
 import '../widgets/main_bottom_nav.dart';
 import 'add_cat_screen.dart';
 import 'analysis_screen.dart';
@@ -44,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<DailyRoutineTask> _routineTasks = [];
   int _routineCompleted = 0;
   int _routineTotal = 0;
+  bool _showDailyCareCelebration = false;
   static const Color _pageBackground = Color(0xFFFFF9F1);
 
   /// Profil adı: kayıtlı `name` alanından kısa selamlama (ör. "Hello Aleyna 👋").
@@ -135,6 +137,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _maybeShowDailyCareCelebration({
+    required bool wasAllComplete,
+    required bool newDone,
+    required DailyRoutineSnapshot snap,
+  }) {
+    final isAllComplete = snap.totalApplicable > 0 &&
+        snap.completedCount >= snap.totalApplicable;
+    if (!newDone || wasAllComplete || !isAllComplete) return;
+
+    setState(() => _showDailyCareCelebration = true);
+  }
+
+  void _onDailyCareCelebrationFinished() {
+    if (!mounted) return;
+    setState(() => _showDailyCareCelebration = false);
+  }
+
   Future<void> _toggleRoutineTask(String taskKey) async {
     if (_routineLoading) return;
 
@@ -143,6 +162,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     final previous = _routineTasks[index];
     final newDone = !previous.isDone;
+    final wasAllComplete =
+        _routineTotal > 0 && _routineCompleted >= _routineTotal;
 
     setState(() {
       final next = List<DailyRoutineTask>.from(_routineTasks);
@@ -164,6 +185,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _routineCompleted = snap.completedCount;
         _routineTotal = snap.totalApplicable;
       });
+      _maybeShowDailyCareCelebration(
+        wasAllComplete: wasAllComplete,
+        newDone: newDone,
+        snap: snap,
+      );
     } catch (e) {
       if (!mounted) return;
       await _loadDailyRoutine();
@@ -226,7 +252,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     const titleColor = Color(0xFF3E3E3E);
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       appBar:
           _navIndex == _profileTabIndex ||
               _navIndex == 0 ||
@@ -316,6 +344,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
             ),
+        ),
+        if (_showDailyCareCelebration && _navIndex == 0)
+          DailyCareCelebrationOverlay(
+            onFinished: _onDailyCareCelebrationFinished,
+          ),
+      ],
     );
   }
 }
