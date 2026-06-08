@@ -11,9 +11,14 @@ import '../widgets/health/health_ui.dart';
 
 /// Bakım sekmesi — mama ve kum takibi.
 class CareScreen extends StatefulWidget {
-  const CareScreen({super.key, required this.onBackToHome});
+  const CareScreen({
+    super.key,
+    required this.onBackToHome,
+    this.onFoodDataChanged,
+  });
 
   final VoidCallback onBackToHome;
+  final VoidCallback? onFoodDataChanged;
 
   @override
   State<CareScreen> createState() => CareScreenState();
@@ -142,8 +147,7 @@ class CareScreenState extends State<CareScreen>
   Future<void> _openFoodSheet() async {
     if (_foodSaving || _foodLoading) return;
 
-    final replacing = _foodRecord?.canAddNewPackage() ?? false;
-    if (_foodRecord != null && !replacing) return;
+    final replacing = _foodRecord != null;
 
     final draft = await showModalBottomSheet<FoodTrackingDraft>(
       context: context,
@@ -175,6 +179,7 @@ class CareScreenState extends State<CareScreen>
         setState(() => _foodRecord = record);
         _snack('Mama takibi kaydedildi.');
       }
+      widget.onFoodDataChanged?.call();
     } on FoodTrackingApiException catch (e) {
       if (!mounted) return;
       _snack(e.message);
@@ -200,6 +205,7 @@ class CareScreenState extends State<CareScreen>
       if (!mounted) return;
       setState(() => _foodRecord = null);
       _snack('Mama takibi silindi.');
+      widget.onFoodDataChanged?.call();
     } on FoodTrackingApiException catch (e) {
       if (!mounted) return;
       _snack(e.message);

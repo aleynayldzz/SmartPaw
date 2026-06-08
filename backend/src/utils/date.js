@@ -5,9 +5,11 @@ function toCalendarDateString(value) {
     return match ? match[1] : null;
   }
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const y = value.getUTCFullYear();
-    const m = String(value.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(value.getUTCDate()).padStart(2, "0");
+    // node-pg DATE sütunlarını yerel gece yarısı Date olarak verir; UTC bileşenleri
+    // takvim gününü bir gün geriye kaydırabilir (ör. TR saatinde 17 Haz → UTC 16 Haz).
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
   return String(value).slice(0, 10);

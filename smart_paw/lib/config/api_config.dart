@@ -75,6 +75,9 @@ class ApiConfig {
   static Uri foodTrackingReplaceUri(int foodId) =>
       Uri.parse('$baseUrl/api/food-tracking/$foodId/replace');
 
+  static Uri foodConsumptionHistoryUri() =>
+      Uri.parse('$baseUrl/api/food-tracking/consumption-history');
+
   static Uri litterTrackingUri() => Uri.parse('$baseUrl/api/litter-tracking');
 
   static Uri litterTrackingRecordUri(int litterId) =>

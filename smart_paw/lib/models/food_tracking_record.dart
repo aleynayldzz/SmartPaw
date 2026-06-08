@@ -62,13 +62,27 @@ class FoodTrackingRecord {
     return remainingGrams(reference) / packageGrams;
   }
 
+  /// Paketin tamamen biteceği gün sayısı (açılış + tüketim süresi).
+  int plannedDurationDays() {
+    if (dailyFoodGrams <= 0 || packageGrams <= 0) return 0;
+    return (packageGrams / dailyFoodGrams).ceil();
+  }
+
   /// Tahmini bitiş tarihi.
   DateTime estimatedFinishDate([DateTime? reference]) {
     final today = _dateOnly(reference ?? DateTime.now());
-    if (dailyFoodGrams <= 0 || remainingGrams(reference) <= 0) {
-      return today;
+    if (dailyFoodGrams <= 0) return today;
+
+    final plannedFinish = _dateOnly(openingDate).add(
+      Duration(days: plannedDurationDays()),
+    );
+    final remaining = remainingGrams(reference);
+
+    if (remaining <= 0) {
+      return plannedFinish.isBefore(today) ? plannedFinish : today;
     }
-    final daysLeft = (remainingGrams(reference) / dailyFoodGrams).ceil();
+
+    final daysLeft = (remaining / dailyFoodGrams).ceil();
     return today.add(Duration(days: daysLeft));
   }
 

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../models/food_package_consumption.dart';
 import '../models/weekly_care_completion.dart';
 import '../models/weight_record.dart';
+import '../services/food_consumption_api_service.dart';
 import '../services/weekly_care_completion_service.dart';
 import '../services/weight_history_service.dart';
 import '../widgets/analysis/analysis_ui.dart';
+import '../widgets/analysis/food_consumption_card.dart';
 import '../widgets/analysis/weekly_care_completion_card.dart';
 import '../widgets/analysis/weight_history_card.dart';
 
@@ -26,6 +29,9 @@ class AnalysisScreenState extends State<AnalysisScreen>
   WeeklyCareCompletion? _weeklyCare;
   bool _weeklyCareLoading = true;
   String? _weeklyCareError;
+  List<FoodPackageConsumption> _foodConsumption = const [];
+  bool _foodConsumptionLoading = true;
+  String? _foodConsumptionError;
 
   @override
   bool get wantKeepAlive => true;
@@ -42,6 +48,7 @@ class AnalysisScreenState extends State<AnalysisScreen>
       _ensureDefaultCat();
     }
     _loadWeeklyCare();
+    _loadFoodConsumption();
   }
 
   @override
@@ -102,11 +109,43 @@ class AnalysisScreenState extends State<AnalysisScreen>
     }
   }
 
+  Future<void> _loadFoodConsumption() async {
+    if (mounted) {
+      setState(() {
+        _foodConsumptionLoading = true;
+        _foodConsumptionError = null;
+      });
+    }
+
+    try {
+      final records = await FoodConsumptionApiService.fetchHistory();
+      if (!mounted) return;
+      setState(() {
+        _foodConsumption = records;
+        _foodConsumptionLoading = false;
+      });
+    } on FoodConsumptionApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _foodConsumptionError = e.message;
+        _foodConsumptionLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _foodConsumptionError =
+            'Mama tüketim analizi yüklenemedi. Lütfen tekrar deneyin.';
+        _foodConsumptionLoading = false;
+      });
+    }
+  }
+
   /// Sekme görünür olduğunda veriyi yeniler.
   Future<void> refresh() async {
     await Future.wait([
       _service.refresh(),
       _loadWeeklyCare(),
+      _loadFoodConsumption(),
     ]);
   }
 
@@ -155,9 +194,52 @@ class AnalysisScreenState extends State<AnalysisScreen>
               records: records,
               onCatSelected: (id) => setState(() => _selectedCatId = id),
             ),
+          const SizedBox(height: 16),
+          _FoodConsumptionSection(
+            loading: _foodConsumptionLoading,
+            error: _foodConsumptionError,
+            records: _foodConsumption,
+            onRetry: _loadFoodConsumption,
+          ),
         ],
       ),
     );
+  }
+}
+
+class _FoodConsumptionSection extends StatelessWidget {
+  const _FoodConsumptionSection({
+    required this.loading,
+    required this.error,
+    required this.records,
+    required this.onRetry,
+  });
+
+  final bool loading;
+  final String? error;
+  final List<FoodPackageConsumption> records;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && records.isEmpty && error == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (error != null && records.isEmpty) {
+      return _InlineErrorCard(message: error!, onRetry: onRetry);
+    }
+
+    return FoodConsumptionCard(records: records);
   }
 }
 
@@ -263,9 +345,9 @@ class _AnalysisPageHeader extends StatelessWidget {
           Text(
             'Analiz',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AnalysisUi.titleInk,
-                  fontWeight: FontWeight.w800,
-                ),
+              color: AnalysisUi.titleInk,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

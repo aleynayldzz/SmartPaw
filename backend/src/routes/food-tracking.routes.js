@@ -18,6 +18,10 @@ router.get("/", requireAuth, (req, res) =>
   respond(res, foodTrackingService.getCurrentForUser(req.auth.userId))
 );
 
+router.get("/consumption-history", requireAuth, (req, res) =>
+  respond(res, foodTrackingService.getConsumptionHistoryForUser(req.auth.userId))
+);
+
 router.get("/:foodId", requireAuth, (req, res) =>
   respond(res, foodTrackingService.getForUser(req.auth.userId, req.params.foodId))
 );

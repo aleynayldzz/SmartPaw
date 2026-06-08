@@ -80,18 +80,22 @@ function remainingPercent(packageWeightKg, dailyFoodGrams, openingDateStr, ref) 
 }
 
 function estimatedFinishDateStr(packageWeightKg, dailyFoodGrams, openingDateStr, ref) {
-  const today = new Date(`${ref}T12:00:00.000Z`);
+  const plannedDays = plannedPackageDurationDays(packageWeightKg, dailyFoodGrams);
+  const plannedFinish = addCalendarDays(openingDateStr, plannedDays);
   const remaining = remainingGrams(
     packageWeightKg,
     dailyFoodGrams,
     openingDateStr,
     ref
   );
-  if (dailyFoodGrams <= 0 || remaining <= 0) {
-    return ref;
+
+  if (dailyFoodGrams <= 0) return ref;
+  if (remaining <= 0) {
+    return plannedFinish <= ref ? plannedFinish : ref;
   }
+
   const daysLeft = Math.ceil(remaining / dailyFoodGrams);
-  const finish = new Date(today);
+  const finish = new Date(`${ref}T12:00:00.000Z`);
   finish.setUTCDate(finish.getUTCDate() + daysLeft);
   return formatDateOnly(finish);
 }
@@ -192,6 +196,150 @@ function mapFoodTrackingRow(row) {
   };
 }
 
+function daysBetweenDates(fromStr, toStr) {
+  const from = new Date(`${fromStr}T12:00:00.000Z`);
+  const to = new Date(`${toStr}T12:00:00.000Z`);
+  const diff = Math.floor((to - from) / (24 * 60 * 60 * 1000));
+  return Math.max(0, Math.min(diff, 99999));
+}
+
+function addCalendarDays(dateStr, days) {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return formatDateOnly(d);
+}
+
+function plannedPackageDurationDays(packageWeightKg, dailyFoodGrams) {
+  const daily = Number(dailyFoodGrams);
+  const grams = Number(packageWeightKg) * 1000;
+  if (daily <= 0 || grams <= 0) return 0;
+  return Math.ceil(grams / daily);
+}
+
+function completionDateForPackage(row, refDateStr) {
+  const openingDate = toCalendarDateString(row.opening_date);
+  const packageWeightKg = Number(row.package_weight_kg);
+  const dailyFoodGrams = Number(row.daily_food_grams);
+  const plannedDays = plannedPackageDurationDays(packageWeightKg, dailyFoodGrams);
+  const plannedFinish = addCalendarDays(openingDate, plannedDays);
+  const remaining = remainingGrams(
+    packageWeightKg,
+    dailyFoodGrams,
+    openingDate,
+    refDateStr
+  );
+
+  if (remaining <= 0) {
+    return plannedFinish <= refDateStr ? plannedFinish : refDateStr;
+  }
+
+  return refDateStr;
+}
+
+function mapConsumptionRow(row) {
+  const openingDate = toCalendarDateString(row.opening_date);
+  const completionDate = toCalendarDateString(row.completion_date);
+  return {
+    consumption_id: row.consumption_id,
+    opening_date: openingDate,
+    completion_date: completionDate,
+    days_lasted: daysBetweenDates(openingDate, completionDate)
+  };
+}
+
+async function archiveCompletedPackage(
+  userId,
+  row,
+  refDateStr = formatDateOnly(todayDateOnly()),
+  nextPackageOpeningDate = null
+) {
+  const openingDate = toCalendarDateString(row.opening_date);
+  let completionDate = completionDateForPackage(row, refDateStr);
+
+  const nextOpen = toCalendarDateString(nextPackageOpeningDate);
+  if (nextOpen && nextOpen >= openingDate) {
+    completionDate = nextOpen;
+  }
+
+  if (!openingDate || !completionDate) return;
+
+  const daysLasted = daysBetweenDates(openingDate, completionDate);
+  if (daysLasted <= 0) return;
+
+  await pool.query(
+    `
+    INSERT INTO food_package_consumption_history (
+      user_id,
+      opening_date,
+      completion_date,
+      package_weight_kg,
+      daily_food_grams
+    )
+    VALUES ($1, $2::date, $3::date, $4, $5)
+    `,
+    [
+      userId,
+      openingDate,
+      completionDate,
+      Number(row.package_weight_kg),
+      Number(row.daily_food_grams)
+    ]
+  );
+}
+
+async function getConsumptionHistoryForUser(userId) {
+  if (!pool) {
+    return { statusCode: 500, json: dbNotConfiguredPayload() };
+  }
+
+  const historyRes = await pool.query(
+    `
+    SELECT
+      consumption_id,
+      to_char(opening_date, 'YYYY-MM-DD') AS opening_date,
+      to_char(completion_date, 'YYYY-MM-DD') AS completion_date
+    FROM food_package_consumption_history
+    WHERE user_id = $1
+    ORDER BY opening_date ASC
+    `,
+    [userId]
+  );
+
+  const records = historyRes.rows.map(mapConsumptionRow);
+
+  const currentRes = await pool.query(
+    `${FOOD_SELECT} WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+  const current = currentRes.rows[0];
+
+  if (current) {
+    const ref = formatDateOnly(todayDateOnly());
+    const derived = computeDerivedFields(current, ref);
+    if (derived.can_add_new_package) {
+      const completionDate = completionDateForPackage(current, ref);
+      records.push(
+        mapConsumptionRow({
+          consumption_id: current.food_id,
+          opening_date: current.opening_date,
+          completion_date: completionDate
+        })
+      );
+    }
+  }
+
+  const completed = records.filter((row) => row.days_lasted > 0);
+  completed.sort((a, b) => a.opening_date.localeCompare(b.opening_date));
+
+  return {
+    statusCode: 200,
+    json: {
+      ok: true,
+      data: { consumption_history: completed }
+    }
+  };
+}
+
 const FOOD_SELECT = `
   SELECT
     food_id,
@@ -289,22 +437,6 @@ function parseCreateOrUpdateBody(body, { isReplace = false } = {}) {
     };
   }
 
-  if (isReplace) {
-    const opening = new Date(`${openingParsed.value}T12:00:00.000Z`);
-    const today = todayDateOnly();
-    if (opening.getTime() < today.getTime()) {
-      return {
-        error: {
-          statusCode: 400,
-          json: {
-            ok: false,
-            message: "opening_date for a new package cannot be in the past."
-          }
-        }
-      };
-    }
-  }
-
   return {
     value: {
       dailyFoodGrams: dailyParsed.value,
@@ -347,7 +479,9 @@ async function createForUser(userId, body) {
       package_weight_kg
     )
     VALUES ($1, $2, $3, $4)
-    RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
+    RETURNING food_id,
+              to_char(opening_date, 'YYYY-MM-DD') AS opening_date,
+              daily_food_grams, package_weight_kg,
               created_at, updated_at
     `,
     [userId, openingDate, dailyFoodGrams, packageWeightKg]
@@ -394,7 +528,9 @@ async function updateForUser(userId, foodIdRaw, body) {
       package_weight_kg = $3,
       updated_at = NOW()
     WHERE food_id = $4 AND user_id = $5
-    RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
+    RETURNING food_id,
+              to_char(opening_date, 'YYYY-MM-DD') AS opening_date,
+              daily_food_grams, package_weight_kg,
               created_at, updated_at
     `,
     [openingDate, dailyFoodGrams, packageWeightKg, foodId, userId]
@@ -432,6 +568,19 @@ async function replacePackageForUser(userId, foodIdRaw, body) {
 
   const { dailyFoodGrams, packageWeightKg, openingDate } = parsed.value;
 
+  const oldOpening = toCalendarDateString(current.opening_date);
+  if (openingDate < oldOpening) {
+    return {
+      statusCode: 400,
+      json: {
+        ok: false,
+        message: "Yeni paket açılış tarihi mevcut paketten önce olamaz."
+      }
+    };
+  }
+
+  await archiveCompletedPackage(userId, current, formatDateOnly(todayDateOnly()), openingDate);
+
   const updated = await pool.query(
     `
     UPDATE food_tracking
@@ -441,7 +590,9 @@ async function replacePackageForUser(userId, foodIdRaw, body) {
       package_weight_kg = $3,
       updated_at = NOW()
     WHERE food_id = $4 AND user_id = $5
-    RETURNING food_id, opening_date, daily_food_grams, package_weight_kg,
+    RETURNING food_id,
+              to_char(opening_date, 'YYYY-MM-DD') AS opening_date,
+              daily_food_grams, package_weight_kg,
               created_at, updated_at
     `,
     [openingDate, dailyFoodGrams, packageWeightKg, foodId, userId]
@@ -488,6 +639,7 @@ async function deleteForUser(userId, foodIdRaw) {
 module.exports = {
   getCurrentForUser,
   getForUser,
+  getConsumptionHistoryForUser,
   createForUser,
   updateForUser,
   replacePackageForUser,

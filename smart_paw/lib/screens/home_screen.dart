@@ -302,6 +302,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         setState(() => _navIndex = 0);
                         _loadDailyRoutine();
                       },
+                      onFoodDataChanged: () =>
+                          _analysisKey.currentState?.refresh(),
                     ),
                     AnalysisScreen(
                       key: _analysisKey,

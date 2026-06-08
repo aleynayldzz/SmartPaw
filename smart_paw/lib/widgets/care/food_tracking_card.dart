@@ -55,13 +55,11 @@ class _AddFoodTrackingSheetState extends State<AddFoodTrackingSheet> {
 
   Future<void> _pickOpeningDate() async {
     final today = _today;
-    final replacing = widget.replacingFinishedPackage;
-
     final picked = await showDatePicker(
       context: context,
       initialDate: _openingDate ?? today,
-      firstDate: replacing ? today : DateTime(today.year - 2),
-      lastDate: replacing ? DateTime(today.year + 2) : today,
+      firstDate: DateTime(today.year - 2),
+      lastDate: today,
       locale: const Locale('tr'),
     );
     if (picked == null || !mounted) return;
@@ -358,8 +356,6 @@ class FoodTrackingCard extends StatelessWidget {
       );
     }
 
-    final showNewPackageButton = record!.canAddNewPackage();
-
     return _SwipeToDeleteCard(
       onDelete: onDelete,
       child: _FoodCardShell(
@@ -367,7 +363,7 @@ class FoodTrackingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _FoodCardHeader(
-              showAddButton: showNewPackageButton,
+              showAddButton: true,
               onAdd: onAdd,
             ),
             const SizedBox(height: 20),
