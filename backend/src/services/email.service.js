@@ -1,4 +1,4 @@
-const nodemailer = require("nodemailer");
+﻿const nodemailer = require("nodemailer");
 const { isNonEmptyString } = require("../utils/validators");
 
 function hasSmtpConfig() {

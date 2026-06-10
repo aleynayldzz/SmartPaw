@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import '../utils/text_input_config.dart';
 import 'login_screen.dart';
 import 'reset_password_code_screen.dart';
 
@@ -201,7 +202,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         _SoftTextField(
                           controller: _emailController,
                           hintText: 'E-posta',
-                          keyboardType: TextInputType.emailAddress,
+                          kind: UserTextInputKind.email,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) {
                             if (!_isSubmitting) {
@@ -268,7 +269,7 @@ class _SoftTextField extends StatelessWidget {
     required this.controller,
     required this.hintText,
     required this.borderColor,
-    this.keyboardType,
+    this.kind = UserTextInputKind.general,
     this.textInputAction,
     this.onSubmitted,
     this.errorText,
@@ -277,7 +278,7 @@ class _SoftTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
   final Color borderColor;
-  final TextInputType? keyboardType;
+  final UserTextInputKind kind;
   final TextInputAction? textInputAction;
   final void Function(String)? onSubmitted;
   final String? errorText;
@@ -300,9 +301,9 @@ class _SoftTextField extends StatelessWidget {
               ),
             ],
           ),
-          child: TextField(
+          child: UserTextField(
             controller: controller,
-            keyboardType: keyboardType,
+            kind: kind,
             textInputAction: textInputAction,
             onSubmitted: onSubmitted,
             cursorColor: borderColor,

@@ -5,8 +5,10 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../services/auth_session.dart';
+import '../utils/text_input_config.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
+import 'verification_screen.dart';
 import 'welcome_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -68,8 +70,27 @@ class _LoginScreenState extends State<LoginScreen> {
       'Password cannot be empty' => 'Şifre gerekli.',
       'Please enter a valid email address' => 'Geçerli bir e-posta adresi girin.',
       'Validation failed.' => 'Lütfen bilgilerinizi kontrol edin.',
+      'Email not verified. A new verification code has been sent.' =>
+        'E-postanızı doğrulamadan giriş yapamazsınız.',
       _ => message.trim(),
     };
+  }
+
+  void _goToEmailVerification(String email) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'E-postanızı doğrulamadan giriş yapamazsınız. '
+          'Yeni doğrulama kodu e-postanıza gönderildi.',
+        ),
+        duration: Duration(seconds: 5),
+      ),
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VerificationScreen(email: email),
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -119,8 +140,23 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
+      if (response.statusCode == 403 &&
+          body['code']?.toString() == 'EMAIL_NOT_VERIFIED') {
+        final data = (body['data'] as Map?)?.cast<String, dynamic>();
+        final verifyEmail =
+            data?['email']?.toString().trim() ?? email.trim();
+        _goToEmailVerification(verifyEmail);
+        return;
+      }
+
       if (response.statusCode == 200 && body['ok'] == true) {
         final data = (body['data'] as Map?)?.cast<String, dynamic>();
+        final user = (data?['user'] as Map?)?.cast<String, dynamic>();
+        if (user?['is_verified'] != true) {
+          _goToEmailVerification(email.trim());
+          return;
+        }
+
         final accessToken =
             data?['accessToken']?.toString() ?? data?['token']?.toString();
         if (accessToken == null || accessToken.isEmpty) {
@@ -131,7 +167,6 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         final refreshToken = data?['refreshToken']?.toString();
-        final user = (data?['user'] as Map?)?.cast<String, dynamic>();
         await AuthSession.setSession(
           accessToken: accessToken,
           refreshToken: refreshToken,
@@ -141,7 +176,10 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute<void>(
-            builder: (_) => const HomeScreen(showLoginSuccess: true),
+            builder: (_) => const HomeScreen(
+              showLoginSuccess: true,
+              promptAddCatIfEmpty: true,
+            ),
           ),
           (route) => false,
         );
@@ -150,8 +188,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final errors = (body['errors'] as Map?)?.cast<String, dynamic>() ?? {};
       setState(() {
-        _emailError = errors['email']?.toString();
-        _passwordError = errors['password']?.toString();
+        _emailError = errors['email'] != null
+            ? _normalizeMessage(errors['email']?.toString())
+            : null;
+        _passwordError = errors['password'] != null
+            ? _normalizeMessage(errors['password']?.toString())
+            : null;
         _generalError = _normalizeMessage(body['message']?.toString());
       });
     } catch (_) {
@@ -212,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         _SoftTextField(
                           controller: _emailController,
                           hintText: 'E-posta',
-                          keyboardType: TextInputType.emailAddress,
+                          kind: UserTextInputKind.email,
                           textInputAction: TextInputAction.next,
                           borderColor: borderPink,
                           errorText: _emailError,
@@ -221,6 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         _SoftTextField(
                           controller: _passwordController,
                           hintText: 'Şifre',
+                          kind: UserTextInputKind.password,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) {
@@ -328,7 +371,7 @@ class _SoftTextField extends StatelessWidget {
     required this.controller,
     required this.hintText,
     required this.borderColor,
-    this.keyboardType,
+    this.kind = UserTextInputKind.general,
     this.obscureText = false,
     this.textInputAction,
     this.onSubmitted,
@@ -339,7 +382,7 @@ class _SoftTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
   final Color borderColor;
-  final TextInputType? keyboardType;
+  final UserTextInputKind kind;
   final bool obscureText;
   final TextInputAction? textInputAction;
   final void Function(String)? onSubmitted;
@@ -364,9 +407,9 @@ class _SoftTextField extends StatelessWidget {
               ),
             ],
           ),
-          child: TextField(
+          child: UserTextField(
             controller: controller,
-            keyboardType: keyboardType,
+            kind: kind,
             obscureText: obscureText,
             textInputAction: textInputAction,
             onSubmitted: onSubmitted,

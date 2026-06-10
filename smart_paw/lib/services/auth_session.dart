@@ -72,6 +72,11 @@ class AuthSession {
       return AuthRestoreOutcome.clearedExpiredSession;
     }
 
+    if (user?['is_verified'] != true) {
+      await clear();
+      return AuthRestoreOutcome.noSession;
+    }
+
     return AuthRestoreOutcome.validSession;
   }
 

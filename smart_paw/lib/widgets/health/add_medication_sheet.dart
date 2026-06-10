@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import '../../models/health_record.dart';
+import '../../utils/text_input_config.dart';
 import '../../utils/turkish_date_format.dart';
 import 'add_vaccine_sheet.dart';
 import 'health_ui.dart';
@@ -287,9 +288,8 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                   label: 'İlaç Adı',
                   child: _readOnly
                       ? _ReadOnlyField(value: _nameCtrl.text.trim().isEmpty ? '—' : _nameCtrl.text.trim())
-                      : TextField(
+                      : UserTextField(
                           controller: _nameCtrl,
-                          textCapitalization: TextCapitalization.sentences,
                           decoration: _inputDecoration(hint: 'Örn. Antibiyotik'),
                         ),
                 ),
@@ -298,7 +298,7 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                   label: 'Dozaj',
                   child: _readOnly
                       ? _ReadOnlyField(value: _dosageCtrl.text.trim().isEmpty ? '—' : _dosageCtrl.text.trim())
-                      : TextField(
+                      : UserTextField(
                           controller: _dosageCtrl,
                           decoration: _inputDecoration(hint: 'Örn. 250 mg'),
                         ),
@@ -347,11 +347,11 @@ class _AddMedicationSheetState extends State<AddMedicationSheet> {
                           value: _notesCtrl.text.trim().isEmpty ? '—' : _notesCtrl.text.trim(),
                           minLines: 3,
                         )
-                      : TextField(
+                      : UserTextField(
                           controller: _notesCtrl,
+                          kind: UserTextInputKind.multiline,
                           minLines: 3,
                           maxLines: 5,
-                          textCapitalization: TextCapitalization.sentences,
                           decoration: _inputDecoration(
                             hint: 'Örn. Tok karnına, ek bilgi (isteğe bağlı)',
                           ),

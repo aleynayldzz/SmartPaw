@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/vet_visit_reasons.dart';
 import '../../models/health_record.dart';
+import '../../utils/text_input_config.dart';
 import '../../utils/turkish_date_format.dart';
 import 'add_vaccine_sheet.dart';
 import 'health_ui.dart';
@@ -585,12 +586,12 @@ class _AddVetAppointmentSheetState extends State<AddVetAppointmentSheet> {
                               : _notesCtrl.text.trim(),
                           minLines: 3,
                         )
-                      : TextField(
+                      : UserTextField(
                           controller: _notesCtrl,
+                          kind: UserTextInputKind.multiline,
                           minLines: 3,
                           maxLines: 5,
                           maxLength: 1000,
-                          textCapitalization: TextCapitalization.sentences,
                           decoration: _inputDecoration(
                             hint: 'Ek bilgi (isteğe bağlı)',
                           ),

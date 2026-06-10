@@ -8,11 +8,24 @@ class PasswordValidation {
 
   static const Color warningColor = Color(0xFFE9A5A1);
 
+  static final RegExp _uppercaseLetter = RegExp(
+    r'[\p{Uppercase_Letter}]',
+    unicode: true,
+  );
+  static final RegExp _lowercaseLetter = RegExp(
+    r'[\p{Lowercase_Letter}]',
+    unicode: true,
+  );
+  static final RegExp _specialCharacter = RegExp(
+    r'[^\p{Letter}\p{Number}]',
+    unicode: true,
+  );
+
   static bool isValid(String password) {
     return password.length >= 8 &&
-        RegExp(r'[A-Z]').hasMatch(password) &&
-        RegExp(r'[a-z]').hasMatch(password) &&
-        RegExp(r'[^A-Za-z0-9]').hasMatch(password);
+        _uppercaseLetter.hasMatch(password) &&
+        _lowercaseLetter.hasMatch(password) &&
+        _specialCharacter.hasMatch(password);
   }
 
   static Widget warningAboveButton(String? message) {

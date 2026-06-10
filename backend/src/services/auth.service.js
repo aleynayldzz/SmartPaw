@@ -23,6 +23,7 @@ function signAccessToken(user) {
     {
       sub: user.user_id,
       email: user.email,
+      is_verified: user.is_verified === true,
       typ: "access"
     },
     getJwtSecret(),
@@ -368,6 +369,60 @@ async function login(body) {
     };
   }
 
+  if (!user.is_verified) {
+    const code = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await pool.query(
+      `
+        INSERT INTO verification_codes (user_id, code, purpose, expires_at, is_used)
+        VALUES ($1, $2, 'email_verification', $3, false)
+        `,
+      [user.user_id, code, expiresAt]
+    );
+
+    try {
+      await sendVerificationEmail({
+        toEmail: user.email,
+        code,
+        expiresAt
+      });
+    } catch (mailErr) {
+      console.error(mailErr);
+      if (mailErr && mailErr.code === "SMTP_NOT_CONFIGURED") {
+        return {
+          statusCode: 500,
+          json: {
+            ok: false,
+            message:
+              "Email delivery is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend/.env."
+          }
+        };
+      }
+      return {
+        statusCode: 500,
+        json: {
+          ok: false,
+          message:
+            "We could not send the verification email. Please check SMTP settings and try again."
+        }
+      };
+    }
+
+    const payload = {
+      ok: false,
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Email not verified. A new verification code has been sent.",
+      data: { email: user.email }
+    };
+
+    if (process.env.NODE_ENV !== "production") {
+      payload.data.dev_verification_code = code;
+    }
+
+    return { statusCode: 403, json: payload };
+  }
+
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
 
@@ -375,9 +430,7 @@ async function login(body) {
     statusCode: 200,
     json: {
       ok: true,
-      message: user.is_verified
-        ? "Login successful"
-        : "Login successful. Please verify your email address.",
+      message: "Login successful",
       data: {
         accessToken,
         refreshToken,
@@ -387,7 +440,7 @@ async function login(body) {
           email: user.email,
           name: user.name,
           surname: user.surname,
-          is_verified: user.is_verified
+          is_verified: true
         }
       }
     }
@@ -722,6 +775,7 @@ function verifyAccessToken(authHeader) {
   try {
     const payload = jwt.verify(m[1].trim(), getJwtSecret());
     if (payload.typ !== "access") return null;
+    if (payload.is_verified !== true) return null;
     const sub = Number(payload.sub);
     if (!Number.isFinite(sub) || sub <= 0) return null;
     return { userId: sub, email: payload.email };

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../utils/password_validation.dart';
+import '../utils/text_input_config.dart';
 import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -235,8 +236,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 22),
-                        TextField(
+                        UserTextField(
                           controller: _passwordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(
@@ -257,8 +259,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _confirmPasswordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscureConfirmPassword,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) {

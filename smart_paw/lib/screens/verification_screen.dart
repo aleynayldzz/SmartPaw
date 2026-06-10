@@ -52,6 +52,20 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   bool get _codeComplete => _code.length == _digitCount;
 
+  String _normalizeMessage(String? message) {
+    if (message == null || message.isEmpty) {
+      return 'Doğrulama başarısız.';
+    }
+    return switch (message.trim()) {
+      'Invalid or expired verification code.' =>
+        'Kod geçersiz veya süresi dolmuş.',
+      'Account is already verified.' => 'Hesap zaten doğrulanmış.',
+      'User not found.' => 'Kullanıcı bulunamadı.',
+      'Validation failed.' => 'Lütfen bilgilerinizi kontrol edin.',
+      _ => message.trim(),
+    };
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -84,13 +98,15 @@ class _VerificationScreenState extends State<VerificationScreen> {
             body = decoded;
           }
         } on FormatException {
-          _showSnack('Something went wrong. Please try again.');
+          _showSnack('Bir hata oluştu. Lütfen tekrar deneyin.');
           return;
         }
       }
 
       if (response.statusCode == 200 && body['ok'] == true) {
-        _showSnack('Successful verification.');
+        _showSnack(
+          'E-posta doğrulandı. Giriş bilgilerinizle tekrar giriş yapın.',
+        );
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
           (route) => false,
@@ -98,11 +114,13 @@ class _VerificationScreenState extends State<VerificationScreen> {
         return;
       }
 
-      _showSnack(body['message']?.toString() ?? 'Verification failed.');
+      _showSnack(
+        _normalizeMessage(body['message']?.toString()),
+      );
     } catch (_) {
       if (!mounted) return;
       _showSnack(
-        'Could not connect to the server. Check that the backend is running.',
+        'Sunucuya bağlanılamadı. Backend\'in çalıştığından emin olun.',
       );
     } finally {
       if (mounted) {
@@ -182,7 +200,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: IconButton(
-                  tooltip: 'Back',
+                  tooltip: 'Geri',
                   onPressed: () {
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute<void>(
@@ -209,8 +227,8 @@ class _VerificationScreenState extends State<VerificationScreen> {
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          'Verification Code',
+                        const Text(
+                          'Doğrulama Kodu',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'serif',
@@ -221,7 +239,18 @@ class _VerificationScreenState extends State<VerificationScreen> {
                             letterSpacing: 0.2,
                           ),
                         ),
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'E-postanıza gönderilen 6 haneli kodu girin.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.45,
+                            color: Color(0xFF6B6B6B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(_digitCount, (index) {
@@ -308,7 +337,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
                                 letterSpacing: 0.3,
                               ),
                             ),
-                            child: Text(_isSubmitting ? 'Verifying...' : 'Verify'),
+                            child: Text(
+                              _isSubmitting ? 'Doğrulanıyor...' : 'Doğrula',
+                            ),
                           ),
                         ),
                       ],

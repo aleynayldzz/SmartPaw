@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/vaccine_names.dart';
 import '../../models/health_record.dart';
+import '../../utils/text_input_config.dart';
 import '../../utils/turkish_date_format.dart';
 import 'health_ui.dart';
 
@@ -498,11 +499,11 @@ class _AddVaccineSheetState extends State<AddVaccineSheet> {
                               : _notesCtrl.text.trim(),
                           minLines: 3,
                         )
-                      : TextField(
+                      : UserTextField(
                           controller: _notesCtrl,
+                          kind: UserTextInputKind.multiline,
                           minLines: 3,
                           maxLines: 5,
-                          textCapitalization: TextCapitalization.sentences,
                           decoration: _inputDecoration(
                             hint: 'Ek bilgi (isteğe bağlı)',
                           ),

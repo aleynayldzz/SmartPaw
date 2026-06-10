@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../utils/password_validation.dart';
+import '../utils/text_input_config.dart';
 import 'verification_screen.dart';
 import 'welcome_screen.dart';
 
@@ -76,6 +77,9 @@ class _SignupScreenState extends State<SignupScreen> {
         PasswordValidation.formatHint,
       'Confirm Password must match Password.' => 'Şifreler eşleşmiyor.',
       'Email format is invalid.' => 'Geçerli bir e-posta adresi girin.',
+      'Email already exists.' ||
+      'An account with this email already exists.' =>
+        'Bu e-posta adresi zaten kayıtlı.',
       _ => message.trim(),
     };
   }
@@ -135,7 +139,9 @@ class _SignupScreenState extends State<SignupScreen> {
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Registration successful. Please verify your email.'),
+            content: Text(
+              'Kayıt başarılı. Lütfen e-postanızı doğrulayın.',
+            ),
           ),
         );
 
@@ -236,27 +242,28 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 22),
-                        TextField(
+                        UserTextField(
                           controller: _nameController,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(hintText: 'Ad'),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _surnameController,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(hintText: 'Soyad'),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
+                          kind: UserTextInputKind.email,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(hintText: 'E-posta'),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _passwordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(
@@ -277,8 +284,9 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _confirmPasswordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscureConfirmPassword,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) {

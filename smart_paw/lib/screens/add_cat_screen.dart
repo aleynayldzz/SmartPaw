@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/cat_breeds.dart';
 import '../models/cat_profile.dart';
 import '../services/cat_api_service.dart';
+import '../utils/text_input_config.dart';
 import '../widgets/health/health_ui.dart';
 
 const _kCreamBg = Color(0xFFFFF9F1);
@@ -13,12 +14,20 @@ const _kTitleColor = Color(0xFF3E3E3E);
 const _kAccentPink = Color(0xFFD88A92);
 
 class AddCatScreen extends StatefulWidget {
-  const AddCatScreen({super.key, this.initial, this.knownCats});
+  const AddCatScreen({
+    super.key,
+    this.initial,
+    this.knownCats,
+    this.isFirstCat = false,
+  });
 
   final CatFormInitial? initial;
 
   /// Kedilerim ekranından gelen güncel liste; isim çakışması kontrolü için.
   final List<Map<String, dynamic>>? knownCats;
+
+  /// Yeni kullanıcının ilk kedisi; geri dönüş kapatılır, kayıttan sonra Kedilerim açılır.
+  final bool isFirstCat;
 
   @override
   State<AddCatScreen> createState() => _AddCatScreenState();
@@ -216,7 +225,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                        child: TextField(
+                        child: UserTextField(
                           controller: searchCtrl,
                           onChanged: (_) => setModal(() {}),
                           decoration: InputDecoration(
@@ -658,7 +667,10 @@ class _AddCatScreenState extends State<AddCatScreen> {
     try {
       final map = await _persistCat();
       if (!mounted) return;
-      Navigator.pop(context, AddCatNavResult.saved(CatApiService.catMapToDraft(map)));
+      Navigator.pop(
+        context,
+        AddCatNavResult.saved(CatApiService.catMapToDraft(map)),
+      );
     } on CatApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -669,17 +681,22 @@ class _AddCatScreenState extends State<AddCatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !widget.isFirstCat,
+      child: Scaffold(
       backgroundColor: _kCreamBg,
       appBar: AppBar(
         backgroundColor: _kCreamBg,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          color: _kTitleColor,
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: widget.isFirstCat
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                color: _kTitleColor,
+                onPressed: () => Navigator.pop(context),
+              ),
+        automaticallyImplyLeading: !widget.isFirstCat,
         title: Text(
           _isEditing ? 'Kediyi düzenle' : 'Kedi Ekle',
           style: const TextStyle(
@@ -742,7 +759,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
                   children: [
                     _LabeledField(
                       label: 'İsim',
-                      child: TextField(
+                      child: UserTextField(
                         controller: _nameCtrl,
                         maxLength: 30,
                         textInputAction: TextInputAction.next,
@@ -915,6 +932,7 @@ class _AddCatScreenState extends State<AddCatScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 

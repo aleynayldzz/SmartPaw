@@ -10,7 +10,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final restoreOutcome = await AuthSession.restore();
   final Widget home = switch (restoreOutcome) {
-    AuthRestoreOutcome.validSession => const HomeScreen(),
+    AuthRestoreOutcome.validSession => const HomeScreen(
+        promptAddCatIfEmpty: true,
+      ),
     AuthRestoreOutcome.clearedExpiredSession => const LoginScreen(),
     AuthRestoreOutcome.noSession => const WelcomeScreen(),
   };

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_api_service.dart';
 import '../utils/password_validation.dart';
+import '../utils/text_input_config.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -205,8 +206,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 22),
-                        TextField(
+                        UserTextField(
                           controller: _currentPasswordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscureCurrentPassword,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(
@@ -228,8 +230,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _newPasswordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscureNewPassword,
                           textInputAction: TextInputAction.next,
                           decoration: _decoration(
@@ -251,8 +254,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        UserTextField(
                           controller: _confirmPasswordController,
+                          kind: UserTextInputKind.password,
                           obscureText: _obscureConfirmPassword,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) {

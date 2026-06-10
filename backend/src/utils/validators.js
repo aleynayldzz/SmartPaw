@@ -11,9 +11,9 @@ function isValidPassword(password) {
   if (typeof password !== "string") return false;
   const trimmed = password;
   if (trimmed.length < 8) return false;
-  if (!/[A-Z]/.test(trimmed)) return false;
-  if (!/[a-z]/.test(trimmed)) return false;
-  if (!/[^A-Za-z0-9]/.test(trimmed)) return false;
+  if (!/\p{Uppercase_Letter}/u.test(trimmed)) return false;
+  if (!/\p{Lowercase_Letter}/u.test(trimmed)) return false;
+  if (!/[^\p{Letter}\p{Number}]/u.test(trimmed)) return false;
   return true;
 }
 

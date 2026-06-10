@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/cat_profile.dart';
 import '../services/auth_api_service.dart';
 import '../services/auth_session.dart';
+import '../services/cat_api_service.dart';
 import '../services/daily_routine_api_service.dart';
 import '../widgets/daily_care_celebration_overlay.dart';
 import '../widgets/main_bottom_nav.dart';
@@ -17,9 +18,16 @@ import 'notifications_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.showLoginSuccess = false});
+  const HomeScreen({
+    super.key,
+    this.showLoginSuccess = false,
+    this.promptAddCatIfEmpty = false,
+  });
 
   final bool showLoginSuccess;
+
+  /// Giriş veya oturum açılışında kedi yoksa kedi ekleme ekranına yönlendir.
+  final bool promptAddCatIfEmpty;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -84,7 +92,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         );
       }
+
+      if (widget.promptAddCatIfEmpty) {
+        await _promptAddCatIfEmpty();
+      }
     });
+  }
+
+  Future<void> _promptAddCatIfEmpty() async {
+    try {
+      final cats = await CatApiService.fetchMyCats();
+      if (!mounted || cats.isNotEmpty) return;
+
+      final result = await Navigator.of(context).push<AddCatNavResult?>(
+        MaterialPageRoute<AddCatNavResult?>(
+          builder: (_) => const AddCatScreen(isFirstCat: true),
+        ),
+      );
+      if (!mounted) return;
+      _healthKey.currentState?.reloadFromApi(silent: true);
+      _analysisKey.currentState?.refresh();
+      final draft = result?.draft;
+      if (draft == null) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => MyCatsScreen(justSavedCatName: draft.name),
+        ),
+      );
+    } on CatApiException {
+      // Kedi listesi alınamazsa ana ekranda kal; kullanıcı sonra tekrar deneyebilir.
+    }
   }
 
   @override

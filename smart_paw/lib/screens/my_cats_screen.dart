@@ -6,7 +6,10 @@ import 'add_cat_screen.dart';
 
 /// Kullanıcı kedilerini listeler; oluşturma ve düzenleme [AddCatScreen] ile.
 class MyCatsScreen extends StatefulWidget {
-  const MyCatsScreen({super.key});
+  const MyCatsScreen({super.key, this.justSavedCatName});
+
+  /// İlk kedi kaydından sonra başarı mesajı göstermek için.
+  final String? justSavedCatName;
 
   static const Color creamBackground = Color(0xFFFFF9F1);
   static const Color titleColor = Color(0xFF3D2F2F);
@@ -59,6 +62,12 @@ class _MyCatsScreenState extends State<MyCatsScreen> {
         _cats = _sortedOldestFirst(rows);
         _loading = false;
       });
+      final savedName = widget.justSavedCatName?.trim();
+      if (savedName != null && savedName.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Kaydedildi: $savedName')),
+        );
+      }
     } on CatApiException catch (e) {
       if (!mounted) return;
       setState(() {
