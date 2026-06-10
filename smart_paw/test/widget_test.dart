@@ -81,8 +81,8 @@ void main() {
     await tester.tap(find.text('open_verification'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Verification Code'), findsOneWidget);
-    expect(find.text('Verify'), findsOneWidget);
+    expect(find.text('Doğrulama Kodu'), findsOneWidget);
+    expect(find.text('Doğrula'), findsOneWidget);
     expect(find.text('Geri Gel'), findsNothing);
 
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
